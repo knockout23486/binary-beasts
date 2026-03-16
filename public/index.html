@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="en">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Phishing Detector</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+  
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+    }
+
+    body {
+      background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0d1628 100%);
+      color: #e0e0e0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow-x: hidden;
+    }
+
+    .app-wrapper {
+      width: 100%;
+      height: 100%;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+      animation: slideDown 0.6s ease-out;
+    }
+
+    .header-title {
+      font-size: 2.5rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #00d9ff 0%, #7c3aed 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+      letter-spacing: -1px;
+    }
+
+    .header-subtitle {
+      font-size: 1rem;
+      color: #9ca3af;
+      font-weight: 400;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .grid-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+
+    @media (max-width: 768px) {
+      .grid-layout {
+        grid-template-columns: 1fr;
+      }
+      .header-title {
+        font-size: 1.75rem;
+      }
+    }
+
+    .card {
+      background: rgba(30, 40, 75, 0.6);
+      border: 1px solid rgba(0, 217, 255, 0.2);
+      border-radius: 12px;
+      padding: 28px;
+      backdrop-filter: blur(10px);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, #00d9ff, transparent);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .card:hover {
+      border-color: rgba(0, 217, 255, 0.4);
+      background: rgba(30, 40, 75, 0.8);
+      transform: translateY(-4px);
+      box-shadow: 0 20px 40px rgba(0, 217, 255, 0.1);
+    }
+
+    .card:hover::before {
+      opacity: 1;
+    }
+
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #00d9ff;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-title i {
+      width: 20px;
+      height: 20px;
+      color: #7c3aed;
+    }
+
+    textarea#message {
+      width: 100%;
+      height: 180px;
+      background: rgba(15, 25, 50, 0.8);
+      border: 1px solid rgba(124, 58, 237, 0.3);
+      border-radius: 8px;
+      padding: 16px;
+      color: #e0e0e0;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 0.9rem;
+      resize: vertical;
+      transition: all 0.3s ease;
+    }
+
+    textarea#message:focus {
+      outline: none;
+      border-color: #00d9ff;
+      background: rgba(15, 25, 50, 0.95);
+      box-shadow: 0 0 20px rgba(0, 217, 255, 0.1);
+    }
+
+    textarea#message::placeholder {
+      color: #6b7280;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    button {
+      flex: 1;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #00d9ff 0%, #7c3aed 100%);
+      color: #0a0e27;
+      box-shadow: 0 10px 30px rgba(0, 217, 255, 0.2);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 15px 40px rgba(0, 217, 255, 0.3);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+
+    .btn-secondary {
+      background: rgba(124, 58, 237, 0.2);
+      color: #7c3aed;
+      border: 1px solid rgba(124, 58, 237, 0.5);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(124, 58, 237, 0.3);
+      border-color: rgba(124, 58, 237, 0.8);
+    }
+
+    .button-loading {
+      pointer-events: none;
+      opacity: 0.7;
+    }
+
+    .drag-drop-zone {
+      border: 2px dashed rgba(124, 58, 237, 0.4);
+      border-radius: 8px;
+      padding: 40px 20px;
+      text-align: center;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      background: rgba(15, 25, 50, 0.5);
+      position: relative;
+    }
+
+    .drag-drop-zone:hover,
+    .drag-drop-zone.dragover {
+      border-color: #00d9ff;
+      background: rgba(0, 217, 255, 0.05);
+    }
+
+    .drag-drop-zone i {
+      width: 48px;
+      height: 48px;
+      color: #7c3aed;
+      margin: 0 auto 12px;
+      display: block;
+    }
+
+    .drag-drop-text {
+      color: #9ca3af;
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+    }
+
+    .drag-drop-highlight {
+      color: #00d9ff;
+      font-weight: 600;
+    }
+
+    #imageUpload {
+      display: none;
+    }
+
+    .image-preview {
+      margin-top: 16px;
+      border-radius: 8px;
+      overflow: hidden;
+      max-height: 300px;
+      background: rgba(0, 217, 255, 0.05);
+      border: 1px solid rgba(0, 217, 255, 0.2);
+    }
+
+    .image-preview img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    #result {
+      display: none;
+      animation: slideUp 0.5s ease-out;
+    }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(0, 217, 255, 0.2);
+    }
+
+    .threat-status {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+
+    .threat-icon {
+      font-size: 2rem;
+    }
+
+    .threat-phishing {
+      color: #ef4444;
+    }
+
+    .threat-suspicious {
+      color: #f59e0b;
+    }
+
+    .threat-safe {
+      color: #10b981;
+    }
+
+    .risk-indicator {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      font-size: 1.1rem;
+    }
+
+    .risk-dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    .risk-high {
+      background: #ef4444;
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.5);
+    }
+
+    .risk-medium {
+      background: #f59e0b;
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.5);
+    }
+
+    .risk-safe {
+      background: #10b981;
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+    }
+
+    .explanation-section {
+      margin-top: 24px;
+    }
+
+    .explanation-title {
+      color: #00d9ff;
+      font-weight: 600;
+      margin-bottom: 12px;
+      font-size: 0.95rem;
+    }
+
+    .explanation-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .explanation-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px;
+      background: rgba(0, 217, 255, 0.05);
+      border-left: 2px solid #7c3aed;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      color: #d1d5db;
+    }
+
+    .explanation-item i {
+      width: 18px;
+      height: 18px;
+      color: #7c3aed;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .links-section {
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid rgba(0, 217, 255, 0.2);
+    }
+
+    .links-title {
+      color: #00d9ff;
+      font-weight: 600;
+      margin-bottom: 12px;
+      font-size: 0.95rem;
+    }
+
+    .links-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .link-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      background: rgba(124, 58, 237, 0.1);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      word-break: break-all;
+      border-left: 2px solid #7c3aed;
+    }
+
+    .link-item i {
+      width: 16px;
+      height: 16px;
+      color: #7c3aed;
+      flex-shrink: 0;
+    }
+
+    .ocr-section {
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid rgba(0, 217, 255, 0.2);
+    }
+
+    .ocr-title {
+      color: #00d9ff;
+      font-weight: 600;
+      margin-bottom: 12px;
+      font-size: 0.95rem;
+    }
+
+    .ocr-text {
+      background: rgba(15, 25, 50, 0.8);
+      border: 1px solid rgba(124, 58, 237, 0.3);
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 0.85rem;
+      font-family: 'Monaco', 'Courier New', monospace;
+      color: #d1d5db;
+      line-height: 1.5;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .loader {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(0, 217, 255, 0.3);
+      border-top-color: #00d9ff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .detection-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 16px;
+      margin-top: 24px;
+    }
+
+    .detection-metric {
+      background: rgba(124, 58, 237, 0.1);
+      border: 1px solid rgba(124, 58, 237, 0.3);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .metric-icon {
+      width: 36px;
+      height: 36px;
+      background: rgba(0, 217, 255, 0.2);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .metric-icon i {
+      width: 20px;
+      height: 20px;
+      color: #00d9ff;
+    }
+
+    .metric-text {
+      flex: 1;
+    }
+
+    .metric-label {
+      font-size: 0.8rem;
+      color: #9ca3af;
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .metric-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #e0e0e0;
+      margin-top: 4px;
+    }
+
+    .clear-btn {
+      background: rgba(124, 58, 237, 0.15);
+      color: #9ca3af;
+      padding: 8px 16px;
+      font-size: 0.85rem;
+    }
+
+    .clear-btn:hover {
+      background: rgba(124, 58, 237, 0.25);
+      color: #d1d5db;
+    }
+
+      .scanning-glow {
+        text-shadow: 0 0 10px #00d9ff, 0 0 20px #7c3aed;
+        animation: pulse 1.5s infinite;
+        color: #00d9ff !important; /* Forces the color to be bright */
+    }
+  </style>
+ </head>
+ <body>
+  <div class="app-wrapper">
+   <header>
+    <div class="header-title">🛡️ AI Phishing Detector</div>
+    <div class="header-subtitle">Advanced threat detection engine</div>
+   </header>
+   <div class="container">
+    <div class="grid-layout">
+     <div class="card">
+      <div class="card-title"><i data-lucide="message-square"></i> Message Analysis</div>
+      <p style="font-size: 0.85rem; color: #9ca3af; margin-bottom: 12px;">Paste suspicious SMS or email text here</p>
+      <textarea id="message" placeholder="Paste your suspicious message here... (SMS, email, chat message, etc.)"></textarea>
+      <div class="button-group">
+        <button class="btn-primary" onclick="analyzeMessage(event)"><span>🔍 Analyze Threat</span></button> 
+        <button class="btn-secondary clear-btn" onclick="clearMessage()">Clear</button>
+      </div>
+     </div>
+     <div class="card">
+      <div class="card-title"><i data-lucide="image"></i> Screenshot Verification</div>
+      <p style="font-size: 0.85rem; color: #9ca3af; margin-bottom: 12px;">Upload screenshot of suspicious message</p>
+      <div class="drag-drop-zone" onclick="document.getElementById('imageUpload').click()">
+        <i data-lucide="upload-cloud"></i>
+       <div class="drag-drop-text"><span class="drag-drop-highlight">Click to upload</span> or drag and drop</div>
+       <div style="font-size: 0.8rem; color: #6b7280;">PNG, JPG, JPEG (Max 5MB)</div>
+      </div>
+      <input type="file" id="imageUpload" accept=".png,.jpg,.jpeg" onchange="handleImageUpload(event)">
+      <div id="imagePreviewContainer"></div>
+      <div class="button-group" style="margin-top: 16px;">
+        <button class="btn-secondary clear-btn" onclick="clearImage()" style="width: 100%;">Clear Image</button>
+      </div>
+     </div>
+    </div>
+    <div id="result" class="card">
+     <div class="result-header">
+      <div class="threat-status"><span class="threat-icon" id="threatIcon">🛡️</span> <span id="threatText">Ready to analyze</span></div>
+      <div class="risk-indicator"><span class="risk-dot" id="risk"></span> <span id="riskText">No scan</span></div>
+     </div>
+     <div class="detection-grid">
+      <div class="detection-metric">
+       <div class="metric-icon"><i data-lucide="zap"></i></div>
+       <div class="metric-text"><div class="metric-label">Threat Score</div><div class="metric-value" id="threatScore">0%</div></div>
+      </div>
+      <div class="detection-metric">
+       <div class="metric-icon"><i data-lucide="link-2"></i></div>
+       <div class="metric-text"><div class="metric-label">Links Found</div><div class="metric-value" id="linkCount">0</div></div>
+      </div>
+      <div class="detection-metric">
+       <div class="metric-icon"><i data-lucide="alert-triangle"></i></div>
+       <div class="metric-text"><div class="metric-label">Red Flags</div><div class="metric-value" id="flagCount">0</div></div>
+      </div>
+     </div>
+     <div class="explanation-section">
+      <div class="explanation-title">🤖 AI Analysis</div>
+      <ul class="explanation-list" id="explanationList"></ul>
+     </div>
+     <div class="links-section" id="linksSection" style="display: none;">
+      <div class="links-title">🔗 Detected Links</div>
+      <ul class="links-list" id="linksList"></ul>
+     </div>
+     <div class="ocr-section" id="ocrSection" style="display: none;">
+      <div class="ocr-title">📄 Extracted Text from Screenshot</div>
+      <div class="ocr-text" id="ocrText"></div>
+     </div>
+    </div>
+   </div>
+  </div>
+
+  <script>
+    
+    // Change this at the top of your <script>
+      const API_BASE = ''; // Empty string means "use the same URL I am currently on"
+
+    let elementConfig = { 
+        app_title: "AI Phishing Detector", 
+        app_subtitle: "Advanced threat detection engine" 
+    };
+
+    // Initialize UI icons on load
+    if (window.lucide) {
+        lucide.createIcons();
+    }
+
+    async function analyzeMessage(event = null) {
+    // FIX: Handle event parameter if it exists (Issue 3)
+    if (event && event.preventDefault) event.preventDefault();
+
+    const button = document.querySelector('.btn-primary');
+    if (button.classList.contains('button-loading')) return;
+
+    const messageText = document.getElementById('message').value.trim();
+    if (!messageText) return alert('Please enter a message to analyze');
+
+    const originalText = button.innerHTML;
+    button.innerHTML = '<div class="loader"></div> Analyzing...';
+    button.classList.add('button-loading');
+
+    try {
+        const response = await fetch(`${API_BASE}/api/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: messageText })
+        });
+        
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+        const analysis = await response.json();
+        
+        // Setup display metadata
+        analysis.threatIcon = analysis.threatLevel === 'high' ? '🚨' : analysis.threatLevel === 'medium' ? '⚠️' : '✅';
+        analysis.threatStatus = analysis.threatLevel === 'high' ? 'Phishing Detected' : analysis.threatLevel === 'medium' ? 'Suspicious' : 'Safe';
+        
+        displayResults(analysis);
+    } catch (error) {
+        console.error("The AI Error is:", error);
+        // FIX: Consistent Port in Alert (Issue 1)
+        alert(`Shields Up! 🛡️ Analysis failed.\n\nError: ${error.message}\n\nPlease ensure the Binary Beasts backend is active and try again.`);
+    } finally {
+        button.innerHTML = originalText;
+        button.classList.remove('button-loading');
+    }
+}
+   function displayResults(analysis) {
+    // 1. STOP THE GLOW AND RESET STATUS TEXT
+    const statusText = document.getElementById('threatText');
+    statusText.classList.remove('scanning-glow');
+    const resultDiv = document.getElementById('result');
+    resultDiv.style.display = 'block';
+    
+    document.getElementById('threatIcon').textContent = analysis.threatIcon;
+    document.getElementById('threatText').textContent = analysis.threatStatus;
+    
+    const riskEl = document.getElementById('risk');
+    riskEl.className = 'risk-dot risk-' + (analysis.threatLevel || 'safe');
+    
+    const riskTexts = { high: '🔴 High Risk', medium: '🟡 Medium Risk', safe: '🟢 Safe' };
+    document.getElementById('riskText').textContent = riskTexts[analysis.threatLevel] || 'Safe'; 
+    document.getElementById('threatScore').textContent = (analysis.threatScore || 0) + '%';
+    
+    document.getElementById('linkCount').textContent = (analysis.detectedLinks || []).length;
+    document.getElementById('flagCount').textContent = (analysis.detectedFlags || []).length;
+
+    const explanationList = document.getElementById('explanationList');
+    explanationList.innerHTML = '';
+    const flags = analysis.detectedFlags || [];
+    
+    if (flags.length === 0) {
+        explanationList.innerHTML = '<li class="explanation-item"><i data-lucide="check"></i><span>No obvious threats detected</span></li>';
+    } else {
+        flags.forEach(flag => {
+            const li = document.createElement('li');
+            li.className = 'explanation-item';
+            li.innerHTML = `<i data-lucide="alert-circle"></i><span>${flag.text || flag}</span>`;
+            explanationList.appendChild(li);
+        });
+    }
+
+    // --- PASTE STARTS HERE (Issue 2 Fix) ---
+    const linksSection = document.getElementById('linksSection');
+    const linksList = document.getElementById('linksList');
+    linksList.innerHTML = '';
+    
+    const links = analysis.detectedLinks || [];
+    if (links.length > 0) {
+        linksSection.style.display = 'block';
+        links.forEach(linkObj => {
+            const li = document.createElement('li');
+            
+            // Logic for colors based on reputation
+            const isMalicious = linkObj.reputation !== 'Safe';
+            const badgeColor = isMalicious ? 'text-red-400 border-red-500/50' : 'text-green-400 border-green-500/50';
+            
+            li.className = `link-item flex flex-col items-start gap-1 p-3 bg-slate-800/40 rounded-lg border-l-4 mb-2 ${isMalicious ? 'border-red-500' : 'border-green-500'}`;
+
+            li.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <i data-lucide="link" class="w-4 h-4 text-purple-400"></i>
+                    <span class="font-mono text-sm text-white">${linkObj.url || linkObj}</span>
+                </div>
+                <div class="flex items-center gap-2 mt-1">
+                    <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-slate-900 border ${badgeColor}">
+                        ${isMalicious ? '⚠️ ' : '🛡️ '}${linkObj.reputation || 'Analyzing...'}
+                    </span>
+                    <span class="text-[11px] text-slate-400 italic">${linkObj.reason || 'Source: AI Threat Intelligence'}</span>
+                </div>
+            `;
+            linksList.appendChild(li);
+        });
+    } else {
+        linksSection.style.display = 'none';
+    }
+
+    // Refresh icons for new list items
+    if (window.lucide) lucide.createIcons();
+    // --- PASTE ENDS HERE ---
+}
+    function displayImagePreview(src) {
+        const container = document.getElementById('imagePreviewContainer');
+        container.innerHTML = `<img src="${src}" style="max-width:100%; border-radius:8px;">`;
+    }
+    async function handleImageUpload(event) {
+        const file = event.target.files[0] || (event.dataTransfer && event.dataTransfer.files[0]);
+        if (!file) return;
+
+        // FIX: Image Size Validation (Issue 4)
+    if (file.size > 5 * 1024 * 1024) {
+        alert("Image must be smaller than 5MB");
+        return;
+    }
+
+        const analyzeBtn = document.querySelector('.btn-primary');
+        const originalBtnText = analyzeBtn.innerHTML;
+        
+        // Show loading state for OCR
+        analyzeBtn.innerHTML = '<div class="loader"></div> Reading Image...';
+        analyzeBtn.classList.add('button-loading');
+
+        displayImagePreview(URL.createObjectURL(file));
+
+        const formData = new FormData();
+        formData.append('image', file);
+
+       try {
+        const statusText = document.getElementById('threatText');
+        const resultDiv = document.getElementById('result');
+        
+        // REVEAL UI IMMEDIATELY (Fix for invisible glow)
+        resultDiv.style.display = 'block';
+        
+        // 1. ADD THE GLOW & START MESSAGES
+        statusText.classList.add('scanning-glow'); 
+        statusText.textContent = "🔍 Scanning Image...";
+
+        setTimeout(() => { statusText.textContent = "🧠 Extracting Text..."; }, 2000);
+        setTimeout(() => { statusText.textContent = "🛡️ Analyzing with AI..."; }, 4000);
+
+        const response = await fetch(`${API_BASE}/api/ocr`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) throw new Error("OCR Failed");
+
+        const data = await response.json();
+        
+        if (data.extractedText) {
+            document.getElementById('message').value = data.extractedText;
+            document.getElementById('ocrSection').style.display = 'block';
+            document.getElementById('ocrText').textContent = data.extractedText;
+            
+            // 2. SUCCESS: REMOVE GLOW
+            statusText.classList.remove('scanning-glow');
+            
+            setTimeout(() => analyzeMessage(), 500);
+        }
+    } catch (error) {
+        // 3. ERROR: REMOVE GLOW
+        const statusText = document.getElementById('threatText');
+        statusText.classList.remove('scanning-glow');
+        
+        console.error("The hidden error is:", error);
+        alert(`Analysis failed!\nError: ${error.message}\nEnsure your Cloud Server is active.`);
+    } finally {
+        // ... your existing finally code
+            document.getElementById('imageUpload').value = '';
+            analyzeBtn.innerHTML = originalBtnText;
+            analyzeBtn.classList.remove('button-loading');
+        }
+    }
+
+    function clearMessage() {
+        document.getElementById('message').value = '';
+        document.getElementById('result').style.display = 'none';
+    }
+
+    function clearImage() {
+        document.getElementById('imagePreviewContainer').innerHTML = '';
+        document.getElementById('ocrSection').style.display = 'none';
+    }
+
+    const dragDropZone = document.querySelector('.drag-drop-zone');
+    dragDropZone.addEventListener('dragover', (e) => { e.preventDefault(); dragDropZone.classList.add('dragover'); });
+    dragDropZone.addEventListener('dragleave', () => { dragDropZone.classList.remove('dragover'); });
+    dragDropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dragDropZone.classList.remove('dragover');
+      
+      // FIX IMPLEMENTED: Safer Drag-and-Drop assignment
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleImageUpload({ target: { files: e.dataTransfer.files } });
+      }
+    });
+	// FIX IMPLEMENTED: Defensive check on initial page load
+    if (window.lucide) {
+        lucide.createIcons();
+    } 
+
+  </script>
+ </body>
+</html>
