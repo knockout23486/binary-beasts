@@ -47,7 +47,7 @@ app.post('/api/analyze', async (req, res) => {
 
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         
-       const prompt = `
+        const prompt = `
             Analyze the following text for phishing threats.
         Return ONLY a JSON object with this structure:
         {
@@ -82,6 +82,14 @@ app.post('/api/analyze', async (req, res) => {
 
     } catch (error) {
         console.error("Detailed Analysis Error:", error);
+        
+        // 🚀 RATE LIMIT FIX: Handles the 429 Quota Error gracefully
+        if (error.status === 429 || (error.message && error.message.includes('429'))) {
+            return res.status(429).json({ 
+                error: "AI is currently busy handling other requests. Please wait 30 seconds and try again!" 
+            });
+        }
+        
         res.status(500).json({ error: "Analysis failed. Please try again." });
     }
 });
