@@ -86,25 +86,11 @@ app.post('/api/analyze', async (req, res) => {
     } catch (error) {
         console.error("Detailed Analysis Error:", error);
 
-        // 🚀 SMART HACKATHON FALLBACK: If API is at its limit (429), send a "Demo" result 
-        // This ensures the UI never breaks for the judges!
+        // 🚀 HONEST RATE LIMIT HANDLING: Tells the user the system is busy
         if (error.status === 429 || (error.message && error.message.includes('429'))) {
-            console.warn("⚠️ API Limit reached - Switching to Demo Fallback Mode");
-            
-            return res.json({
-                threatScore: 85,
-                threatLevel: "high",
-                detectedFlags: [
-                    { "text": "High pressure/Urgency detected" },
-                    { "text": "Suspicious call to action" }
-                ],
-                detectedLinks: [
-                    {
-                        "url": "demo-analysis-active.net",
-                        "reputation": "Suspicious",
-                        "reason": "Flagged by local security heuristics"
-                    }
-                ]
+            console.warn("⚠️ API Limit reached");
+            return res.status(429).json({ 
+                error: "API limit crossed. Please wait a minute and try again!" 
             });
         }
         
