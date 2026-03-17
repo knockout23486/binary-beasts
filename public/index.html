@@ -6,9 +6,7 @@
   <title>AI Phishing Detector</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
-  
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
-  
   
   <style>
     * {
@@ -28,6 +26,26 @@
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       overflow-x: hidden;
     }
+
+    /* ==========================================
+       ✨ NEW: AI MODEL BADGE STYLES
+       ========================================== */
+    .model-badge-base {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 15px;
+        border: 1px solid rgba(255,255,255,0.1);
+        animation: slideDown 0.4s ease-out;
+    }
+
+    .badge-gemini { background: linear-gradient(90deg, #4285F4, #9b72cb); color: white; box-shadow: 0 0 15px rgba(66, 133, 244, 0.3); }
+    .badge-deepseek { background: linear-gradient(90deg, #0052D4, #4364F7); color: white; box-shadow: 0 0 15px rgba(0, 82, 212, 0.3); }
+    .badge-llama { background: linear-gradient(90deg, #f46b45, #eea849); color: white; box-shadow: 0 0 15px rgba(244, 107, 69, 0.3); }
 
     .app-wrapper {
       width: 100%;
@@ -528,7 +546,7 @@
       .scanning-glow {
         text-shadow: 0 0 10px #00d9ff, 0 0 20px #7c3aed;
         animation: pulse 1.5s infinite;
-        color: #00d9ff !important; /* Forces the color to be bright */
+        color: #00d9ff !important; 
     }
   </style>
  </head>
@@ -565,6 +583,8 @@
      </div>
     </div>
     <div id="result" class="card">
+     <div id="model-badge" class="model-badge-base" style="display: none;"></div>
+
      <div class="result-header">
       <div class="threat-status"><span class="threat-icon" id="threatIcon">🛡️</span> <span id="threatText">Ready to analyze</span></div>
       <div class="risk-indicator"><span class="risk-dot" id="risk"></span> <span id="riskText">No scan</span></div>
@@ -601,21 +621,18 @@
 
   <script>
     
-    // Change this at the top of your <script>
-      const API_BASE = ''; // Empty string means "use the same URL I am currently on"
+    const API_BASE = ''; 
 
     let elementConfig = { 
         app_title: "AI Phishing Detector", 
         app_subtitle: "Advanced threat detection engine" 
     };
 
-    // Initialize UI icons on load
     if (window.lucide) {
         lucide.createIcons();
     }
 
     async function analyzeMessage(event = null) {
-    // FIX: Handle event parameter if it exists (Issue 3)
     if (event && event.preventDefault) event.preventDefault();
 
     const button = document.querySelector('.btn-primary');
@@ -635,24 +652,20 @@
         body: JSON.stringify({ text: messageText })
     });
     
-    // 🛡️ NEW LOGIC: Don't just throw an error, read what the server said first!
     if (!response.ok) {
-        const errorData = await response.json().catch(() => ({})); // Try to get JSON, fallback to empty object
+        const errorData = await response.json().catch(() => ({}));
         const errorMessage = errorData.error || `Server error: ${response.status}`;
         throw new Error(errorMessage);
     }
 
     const analysis = await response.json();
-    // Continue with your successful analysis display logic...
         
-        // Setup display metadata
         analysis.threatIcon = analysis.threatLevel === 'high' ? '🚨' : analysis.threatLevel === 'medium' ? '⚠️' : '✅';
         analysis.threatStatus = analysis.threatLevel === 'high' ? 'Phishing Detected' : analysis.threatLevel === 'medium' ? 'Suspicious' : 'Safe';
         
         displayResults(analysis);
     } catch (error) {
         console.error("The AI Error is:", error);
-        // FIX: Consistent Port in Alert (Issue 1)
         alert(`Shields Up! 🛡️ Analysis failed.\n\nError: ${error.message}\n\nPlease ensure the Binary Beasts backend is active and try again.`);
     } finally {
         button.innerHTML = originalText;
@@ -660,11 +673,33 @@
     }
 }
    function displayResults(analysis) {
-    // 1. STOP THE GLOW AND RESET STATUS TEXT
-    const statusText = document.getElementById('threatText');
-    statusText.classList.remove('scanning-glow');
     const resultDiv = document.getElementById('result');
+    const statusText = document.getElementById('threatText');
+    const badge = document.getElementById('model-badge');
+
+    // 1. Reset state to prevent flicker
     resultDiv.style.display = 'block';
+    statusText.classList.remove('scanning-glow');
+    badge.style.display = 'none'; 
+    badge.className = 'model-badge-base'; // Wipes old colors, keeps structural base
+
+    // ✨ UPDATE THE AI BADGE LOGIC
+    if (analysis.usedModel) {
+        badge.style.display = 'inline-block';
+        if (analysis.usedModel === 'gemini') {
+            badge.innerText = "🛡️ Powered by Google Gemini";
+            badge.classList.add("badge-gemini");
+        } else if (analysis.usedModel === 'deepseek') {
+            badge.innerText = "🧠 Fallback: DeepSeek-R1";
+            badge.classList.add("badge-deepseek");
+        } else if (analysis.usedModel === 'llama') {
+            badge.innerText = "🦙 Fallback: Meta Llama 3.1";
+            badge.classList.add("badge-llama");
+        } else {
+            badge.innerText = "⚙️ AI Model Active";
+            badge.classList.add("badge-gemini"); 
+        }
+    }
     
     document.getElementById('threatIcon').textContent = analysis.threatIcon;
     document.getElementById('threatText').textContent = analysis.threatStatus;
@@ -694,7 +729,6 @@
         });
     }
 
-    // --- PASTE STARTS HERE (Issue 2 Fix) ---
     const linksSection = document.getElementById('linksSection');
     const linksList = document.getElementById('linksList');
     linksList.innerHTML = '';
@@ -705,7 +739,6 @@
         links.forEach(linkObj => {
             const li = document.createElement('li');
             
-            // Logic for colors based on reputation
             const isMalicious = linkObj.reputation !== 'Safe';
             const badgeColor = isMalicious ? 'text-red-400 border-red-500/50' : 'text-green-400 border-green-500/50';
             
@@ -729,9 +762,7 @@
         linksSection.style.display = 'none';
     }
 
-    // Refresh icons for new list items
     if (window.lucide) lucide.createIcons();
-    // --- PASTE ENDS HERE ---
 }
     function displayImagePreview(src) {
         const container = document.getElementById('imagePreviewContainer');
@@ -741,7 +772,6 @@
         const file = event.target.files[0] || (event.dataTransfer && event.dataTransfer.files[0]);
         if (!file) return;
 
-        // FIX: Image Size Validation (Issue 4)
     if (file.size > 5 * 1024 * 1024) {
         alert("Image must be smaller than 5MB");
         return;
@@ -750,7 +780,6 @@
         const analyzeBtn = document.querySelector('.btn-primary');
         const originalBtnText = analyzeBtn.innerHTML;
         
-        // Show loading state for OCR
         analyzeBtn.innerHTML = '<div class="loader"></div> Reading Image...';
         analyzeBtn.classList.add('button-loading');
 
@@ -763,10 +792,8 @@
         const statusText = document.getElementById('threatText');
         const resultDiv = document.getElementById('result');
         
-        // REVEAL UI IMMEDIATELY (Fix for invisible glow)
         resultDiv.style.display = 'block';
         
-        // 1. ADD THE GLOW & START MESSAGES
         statusText.classList.add('scanning-glow'); 
         statusText.textContent = "🔍 Scanning Image...";
 
@@ -787,20 +814,17 @@
             document.getElementById('ocrSection').style.display = 'block';
             document.getElementById('ocrText').textContent = data.extractedText;
             
-            // 2. SUCCESS: REMOVE GLOW
             statusText.classList.remove('scanning-glow');
             
             setTimeout(() => analyzeMessage(), 500);
         }
     } catch (error) {
-        // 3. ERROR: REMOVE GLOW
         const statusText = document.getElementById('threatText');
         statusText.classList.remove('scanning-glow');
         
         console.error("The hidden error is:", error);
         alert(`Analysis failed!\nError: ${error.message}\nEnsure your Cloud Server is active.`);
     } finally {
-        // ... your existing finally code
             document.getElementById('imageUpload').value = '';
             analyzeBtn.innerHTML = originalBtnText;
             analyzeBtn.classList.remove('button-loading');
@@ -824,12 +848,11 @@
       e.preventDefault();
       dragDropZone.classList.remove('dragover');
       
-      // FIX IMPLEMENTED: Safer Drag-and-Drop assignment
       if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
         handleImageUpload({ target: { files: e.dataTransfer.files } });
       }
     });
-	// FIX IMPLEMENTED: Defensive check on initial page load
+
     if (window.lucide) {
         lucide.createIcons();
     } 
