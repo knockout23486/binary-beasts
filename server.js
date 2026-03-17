@@ -10,6 +10,9 @@ const path = require('path');
 
 const app = express();
 
+// 🛡️ SECURITY FIX: Tell Express to trust Render's proxy for the Rate Limiter
+app.set('trust proxy', 1);
+
 // 🛡️ BINARY BEASTS FIREWALL: Protects your Gemini API Key
 const limiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
