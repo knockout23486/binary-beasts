@@ -629,15 +629,21 @@
     button.classList.add('button-loading');
 
     try {
-        const response = await fetch(`${API_BASE}/api/analyze`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: messageText })
-        });
-        
-        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+    const response = await fetch(`${API_BASE}/api/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: messageText })
+    });
+    
+    // 🛡️ NEW LOGIC: Don't just throw an error, read what the server said first!
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({})); // Try to get JSON, fallback to empty object
+        const errorMessage = errorData.error || `Server error: ${response.status}`;
+        throw new Error(errorMessage);
+    }
 
-        const analysis = await response.json();
+    const analysis = await response.json();
+    // Continue with your successful analysis display logic...
         
         // Setup display metadata
         analysis.threatIcon = analysis.threatLevel === 'high' ? '🚨' : analysis.threatLevel === 'medium' ? '⚠️' : '✅';
