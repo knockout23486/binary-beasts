@@ -151,24 +151,7 @@ http://localhost:3000
 
 ---
 
-## 👨‍💻 Team
 
-**BINARY BEASTS <<0101>>**
-Arya College of Engineering & Information Technology
-
-* **Ankit Kumar**
-  🔗 https://www.linkedin.com/in/kr-ankit18
-
-* **Abhishek Kumar**
-  🔗 https://linkedin.com/in/abhishek-kumar-aceit
-
-* **Lakshya Anand**
-  🔗 https://linkedin.com/in/lakshya-anand121
-
-* **Adarsh Kumar**
-  🔗 https://linkedin.com/in/adarsh-mehta-aceit
-
----
 
 ## 🔄 Continuous Improvement
 
@@ -193,3 +176,174 @@ This system is actively being enhanced with:
 ## ⭐ Final Note
 
 Binary Beasts is not just a project — it's a step toward building **intelligent, adaptive cybersecurity systems** capable of defending against next-generation threats.
+
+---
+
+# 🚀 VERSION 2.0 UPDATE: Enterprise-Grade Architecture
+*"An indestructible AI cybersecurity engine designed to detect zero-day threats in real time."*
+
+During development, we identified a critical flaw in traditional AI-based systems — they fail under real-world conditions such as API rate limits, outages, and network instability.
+
+To solve this, we **completely re-engineered Binary Beasts** from a simple prototype into a **high-availability, fault-tolerant cybersecurity engine**.
+
+---
+
+## ⚖️ Architecture Evolution: V1.0 vs V2.0
+
+| Feature | ⚠️ V1.0 (Prototype) | 🛡️ V2.0 (Enterprise Upgrade) |
+|--------|------------------|-----------------------------|
+| **API Scalability** | Failed on `429 Quota Exceeded` | **Infinite Quota Engine:** Load-balanced multi-key system |
+| **Uptime Reliability** | Dependent on single AI model | **Fault-Tolerant:** 3-Tier AI Waterfall (Gemini → DeepSeek → Llama) |
+| **Threat Detection** | Basic AI text analysis | **Layered Intelligence:** Web Risk API + AI heuristics |
+| **Image Processing** | Basic Tesseract OCR | **Advanced Pipeline:** Jimp → Gemini Vision → Qwen → Tesseract |
+| **System Stability** | Prone to downtime | **Zero Downtime Architecture** |
+
+---
+
+## 🌟 Deep Dive: Version 2.0 Enhancements
+
+### 1️⃣ Infinite Quota Engine (Dynamic Key Rotator)
+
+Free-tier API limits are a major bottleneck in real-world systems.
+
+**Solution:**
+- Multi-project API key pooling
+- Automatic key rotation on `429` errors
+
+**Outcome:**
+- ✅ No service interruption  
+- ✅ Seamless scaling  
+- ✅ Consistent user experience  
+
+---
+
+### 2️⃣ 3-Tier Fault-Tolerant AI Waterfall
+
+Cloud AI services can fail due to latency, outages, or rate limits.
+
+**Architecture:**
+
+Tier 1 → Gemini 2.5 Flash (Primary)
+Tier 2 → DeepSeek-R1 (Fallback via OpenRouter)
+Tier 3 → Llama 3.1 (Emergency Backup)
+
+
+**Key Insight:**
+> If one model fails, another takes over instantly — ensuring continuous operation.
+
+---
+
+### 3️⃣ Zero-Day Threat Intelligence
+
+Traditional systems fail against newly generated phishing links.
+
+**Our Approach:**
+
+**Layer 1 – Global Verification**
+- Uses Google Web Risk API  
+- Detects known malicious URLs instantly  
+
+**Layer 2 – AI Heuristic Analysis**
+- Detects:
+  - Domain spoofing (`amaz0n`)
+  - Suspicious TLDs (`.xyz`)
+  - Hidden attack paths (`/login.html`)
+
+**Result:**
+> Detects threats even when global databases report "clean"
+
+---
+
+### 4️⃣ Vision + OCR Threat Pipeline
+
+Modern attacks often hide malicious content inside images.
+
+**Pipeline Flow:**
+
+Image Input
+↓
+Jimp Optimization (contrast + scaling)
+↓
+Gemini Vision (Primary)
+↓
+Qwen Vision (Fallback)
+↓
+Tesseract.js (Offline Backup)
+
+
+**Capabilities:**
+- Extracts faint or hidden text  
+- Works even during cloud failures  
+- Detects:
+  - Fake payment screenshots  
+  - Image-based phishing scams  
+
+---
+
+## ⚙️ Tech Stack (V2.0)
+
+### 🎨 Frontend
+- HTML, Tailwind CSS, JavaScript  
+- Dynamic UI Telemetry  
+  - Threat Score (0–100)  
+  - Active AI Engine Indicator  
+
+---
+
+### ⚙️ Backend
+- Node.js, Express.js  
+- Rate Limiting (Binary Beasts Firewall)  
+- Distributed API Key Load Balancing  
+
+---
+
+### 🧠 AI & APIs
+- Google Gemini (Text + Vision)  
+- OpenRouter (DeepSeek, Llama, Qwen)  
+- Google Web Risk API  
+
+---
+
+### 🔍 Image Processing
+- Jimp (Pre-processing & enhancement)  
+- Tesseract.js (Offline OCR fallback)  
+
+---
+
+## 🔑 Local Setup (V2.0)
+
+To run Version 2.0 locally, configure your `.env` file:
+
+```env
+PORT=3000
+
+# 🚀 Multi-Project Key Array (no spaces)
+GEMINI_KEYS=AIzaSyKeyOne,AIzaSyKeyTwo,AIzaSyKeyThree
+
+# Backup + External APIs
+GEMINI_API_KEY=AIzaSyBackupKey
+OPENROUTER_API_KEY=your_openrouter_api_key
+GOOGLE_WEB_RISK_API_KEY=your_web_risk_api_key
+🧠 Key Takeaway
+
+Binary Beasts v2.0 is not just an AI-powered scanner —
+it is a resilient, distributed threat intelligence system designed to operate reliably under real-world constraints.
+
+## 👨‍💻 Team
+
+**BINARY BEASTS <<0101>>**
+Arya College of Engineering & Information Technology
+
+* **Ankit Kumar**
+  🔗 https://www.linkedin.com/in/kr-ankit18
+
+* **Abhishek Kumar**
+  🔗 https://linkedin.com/in/abhishek-kumar-aceit
+
+* **Lakshya Anand**
+  🔗 https://linkedin.com/in/lakshya-anand121
+
+* **Adarsh Kumar**
+  🔗 https://linkedin.com/in/adarsh-mehta-aceit
+
+---
