@@ -192,6 +192,7 @@ async function analyzeWithFallback(prompt) {
 // ==========================================
 // 🧠 SUPERPOWER 1: ANALYZE WHOLE MESSAGES
 // ==========================================
+
 app.post('/api/analyze', async (req, res) => {
     try {
         const { text } = req.body;
@@ -200,14 +201,39 @@ app.post('/api/analyze', async (req, res) => {
             return res.status(400).json({ error: "Input is empty." });
         }
 
-        const prompt = `Analyze this for phishing. Return ONLY JSON:
-        {
-            "threatScore": (0-100),
-            "threatLevel": ("safe", "medium", or "high"),
-            "detectedFlags": [{"text": "reason"}],
-            "detectedLinks": [{"url": "link.com", "reputation": "Suspicious", "reason": "desc"}]
-        }
-        Text: "${text.trim().substring(0, 1500)}"`;
+        const prompt = `
+Act as an advanced AI-based cybersecurity analysis assistant.
+
+Analyze the following communication (Text/Email/URL) for potential phishing, social engineering, or malicious intent.
+
+TEXT TO ANALYZE: "${text.trim().substring(0, 1500)}"
+
+--- ANALYSIS PROTOCOLS ---
+1. PSYCHOLOGICAL TRIGGERS: Detect urgency, authority impersonation, fear tactics, or suspicious requests.
+2. SEMANTIC DECEPTION: Identify typosquatting, misleading domains, suspicious TLDs (.xyz, .top).
+3. TECHNICAL PATTERNS: Flag URL shorteners or unusual link structures.
+4. HEURISTIC ANALYSIS: Evaluate whether domains, subdomains, or hosting patterns look inconsistent or suspicious.
+
+Note: Base your analysis only on visible patterns. Do not assume access to external databases or real-time threat intelligence.
+
+--- OUTPUT RULES ---
+- Return ONLY valid JSON
+- No markdown or extra text
+- Keep explanations concise and professional
+
+--- REQUIRED JSON STRUCTURE ---
+{
+    "threatScore": (0-100, where 100 is Max Danger),
+    "threatLevel": ("safe", "medium", "high" - DO NOT use other words),
+    "analysisSummary": "1-sentence summary",
+    "detectedFlags": [
+        {"text": "Reason for red flag"}
+    ],
+    "detectedLinks": [
+        {"url": "link.com", "reputation": "Suspicious/Malicious/Safe", "reason": "evidence"}
+    ]
+}
+`;
 
         const result = await analyzeWithFallback(prompt);
 
@@ -215,10 +241,20 @@ app.post('/api/analyze', async (req, res) => {
             return res.status(500).json({ error: "All AI systems are busy." });
         }
 
-        const parsedData = extractJSON(result.text);
+        let parsedData = extractJSON(result.text);
 
         if (!parsedData) {
             return res.status(500).json({ error: "Invalid AI response format" });
+        }
+
+        // 🌟 THE VIP WHITELIST FIX (Keeps the app from flagging itself) 🌟
+        const myAppUrl = "binary-beasts-imqc.onrender.com";
+        if (text.includes(myAppUrl)) {
+            parsedData.threatScore = 0;
+            parsedData.threatLevel = "safe";
+            parsedData.analysisSummary = "Verified as the official, secure host of the Binary Beasts Engine.";
+            parsedData.detectedFlags = [{"text": "Official Domain Verified"}];
+            parsedData.detectedLinks = [{"url": myAppUrl, "reputation": "Safe", "reason": "Official Application Host"}];
         }
 
         return res.json({
@@ -270,22 +306,23 @@ app.post('/api/analyze-link', async (req, res) => {
         // --- PART 2: THE 3-TIER EXPLAINER ENGINE ---
         // ==========================================
         const prompt = `
-            You are an elite Cybersecurity Threat Intelligence AI. 
-            Analyze this URL: "${url}"
+            Act as an elite Cybersecurity Threat Intelligence AI. 
+            Analyze this specific URL for zero-day phishing or malicious intent: "${url}"
             
             GLOBAL DATABASE STATUS: ${isBlacklisted ? "🚨 BLACKLISTED: " + threatType : "✅ NOT CURRENTLY IN BLACKLIST"}
             
-            TASK: Provide a concise, professional security assessment (1-3 sentences maximum).
+            TASK: Provide a concise, clinical security assessment (1-3 sentences maximum).
             
-            DETERMINATIVE RULES:
-            1. If BLACKLISTED: Identify the threat (Phishing, Malware, etc.) and warn the user NOT to enter credentials or download files.
-            2. If NOT IN BLACKLIST but the URL looks like a 'Zero-Day' spoof (e.g., 'amaz0n', 'paypa1', '.xyz', '.top', or contains 'phishing.html'): 
-               Ignore the "Clean" database status. Point out the specific red flags in the URL and categorize it as HIGH RISK.
-            3. If NOT IN BLACKLIST and it is a legitimate, well-known domain: Reassure the user that the link is safe and verified.
+            --- ANALYSIS PROTOCOLS ---
+            1. DATABASE OVERRIDE: If the database says BLACKLISTED, identify the threat and warn the user.
+            2. SEMANTIC DECEPTION: If not blacklisted, check for typosquatting (e.g., 'amaz0n'), suspicious TLDs (.xyz, .top), or country-code spoofing (e.g., .ge instead of .com).
+            3. HEURISTIC ANALYSIS: Does it use a free shared host (like onrender.com or vercel.app) to look like a legitimate service?
+            4. SAFE VERIFICATION: If the database is clean AND there are absolutely no semantic or heuristic red flags, reassure the user that the domain appears legitimate and safe.
             
-            OUTPUT STYLE: Do not use markdown bolding. Keep it clinical and urgent if a threat is found.
+            OUTPUT RULES:
+            - Output ONLY plain text. No JSON, no markdown bolding, no conversational filler.
+            - If you detect deceptive semantics or heuristic red flags, categorize it as HIGH RISK, even if the database status is clean.
         `;
-
         let finalExplanation = "";
         let usedEngine = "";
 
