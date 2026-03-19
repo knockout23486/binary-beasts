@@ -363,21 +363,39 @@ app.post('/api/analyze-link', async (req, res) => {
         // ==========================================
         // --- PART 3: COMBINED RESPONSE ---
         // ==========================================
+
+        // 🌟 THE VIP WHITELIST ARRAY (Add as many safe domains as you want here!)
+        const vipDomains = [
+            "binary-beasts-imqc.onrender.com",
+            "github.com",
+            "linkedin.com",
+            "roblox.com" // You can add the real roblox here so it doesn't flag the official site!
+        ];
         
+        const isWhitelist = vipDomains.some(vip => url.toLowerCase().includes(vip));
         // Let's force a 0 safety score if it's blacklisted OR if it's the exact phishing test link
         const isPhishingTest = url.toLowerCase().includes("phishing.html");
-        const finalBlacklistStatus = isBlacklisted || isPhishingTest; 
+       // If it's whitelisted, it cannot be blacklisted!
+        const finalBlacklistStatus = (isBlacklisted || isPhishingTest) && !isWhitelist;
+
+        const aiText = (finalExplanation || "").toLowerCase();
+        let isAiThreat = (aiText.includes("high risk") || aiText.includes("phishing") || aiText.includes("spoof") || aiText.includes("malicious") || aiText.includes("deceptive")) && !isWhitelist;
         
         let safetyScore = 90;
-        if (finalBlacklistStatus || url.includes(".xyz")) {
+        if (finalBlacklistStatus || url.includes(".xyz") || isAiThreat) {
             safetyScore = 0;
+        }
+        // 🌟 WHITELIST OVERRIDE 🌟
+        if (isWhitelist) {
+            safetyScore = 100;
+            finalExplanation = "✅ Verified Domain. This link is on the Binary Beasts official secure whitelist.";
         }
 
         res.json({
             url: url,
-            isBlacklisted: finalBlacklistStatus, // This guarantees the frontend turns red for the demo!
-            threatType: isBlacklisted ? threatType : (isPhishingTest ? "SOCIAL_ENGINEERING (Zero-Day)" : "SUSPICIOUS_PATTERN"),
-            explanation: (finalExplanation || "").trim(),
+            isBlacklisted: finalBlacklistStatus || isAiThreat, 
+            threatType: isWhitelist ? "VERIFIED_SAFE" : (isBlacklisted ? threatType : (isPhishingTest || isAiThreat ? "SOCIAL_ENGINEERING (Zero-Day)" : "SUSPICIOUS_PATTERN")),
+            explanation: isWhitelist ? finalExplanation : (finalExplanation || "").trim(),
             safetyScore: safetyScore,
             engineUsed: usedEngine
         });
