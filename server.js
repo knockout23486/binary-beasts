@@ -133,7 +133,7 @@ async function analyzeWithFallback(prompt) {
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    model: "deepseek/deepseek-r1",
+                    model: "deepseek/deepseek-chat", //deepseek-r1
                     messages: [{ role: "user", content: prompt }]
                 })
             }),
@@ -164,7 +164,7 @@ async function analyzeWithFallback(prompt) {
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    model: "meta-llama/llama-3.1-8b-instruct:free",
+                    model: "meta-llama/llama-3.1-8b-instruct",
                     messages: [{ role: "user", content: prompt }]
                 })
             }),
@@ -379,7 +379,7 @@ app.post('/api/analyze-link', async (req, res) => {
                             "Content-Type": "application/json"
                         },
                         body: JSON.stringify({
-                            model: "meta-llama/llama-3.1-8b-instruct:free",
+                            model: "meta-llama/llama-3.1-8b-instruct",
                             messages: [{ role: "user", content: prompt }]
                         })
                     });
@@ -527,7 +527,7 @@ app.post('/api/ocr', upload.single('image'), async (req, res) => {
                        //model: "qwen/qwen-2-vl-7b-instruct:free", 
                        // Change Tier 2 model to this:
                         //model: "google/gemini-flash-1.5-8b",
-                        model: "qwen/qwen-2-vl-7b-instruct:free",
+                        model: "qwen/qwen-2-vl-7b-instruct",
                         messages: [
                             {
                                 role: "user",
