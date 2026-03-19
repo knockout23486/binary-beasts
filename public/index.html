@@ -632,9 +632,37 @@
     <div id="linkResult" style="margin-top: 15px; display: none; padding: 15px; border-radius: 8px;">
         </div>
 </div>
+
+<div class="soc-dashboard" style="background: #0d1117; color: #00ffcc; padding: 25px; border-radius: 12px; margin-top: 40px; border: 1px solid #30363d; font-family: 'Courier New', Courier, monospace; box-shadow: 0 4px 20px rgba(0,255,204,0.1);">
+    
+    <h2 style="text-align: center; border-bottom: 1px solid #30363d; padding-bottom: 15px; margin-top: 0;">🛡️ Threat Telemetry (Global)</h2>
+    
+    <div style="display: flex; justify-content: space-around; margin: 30px 0; flex-wrap: wrap;">
+        <div style="text-align: center; margin: 10px;">
+            <h4 style="margin: 0; color: #8b949e; text-transform: uppercase; letter-spacing: 1px;">Live Scans</h4>
+            <h1 id="stat-scans" style="margin: 10px 0; font-size: 2.5em; color: #ffffff;">0</h1>
+        </div>
+        <div style="text-align: center; margin: 10px;">
+            <h4 style="margin: 0; color: #8b949e; text-transform: uppercase; letter-spacing: 1px;">Threats Blocked</h4>
+            <h1 id="stat-threats" style="color: #ff4444; margin: 10px 0; font-size: 2.5em; text-shadow: 0 0 10px rgba(255,68,68,0.3);">0</h1>
+        </div>
+        <div style="text-align: center; margin: 10px;">
+            <h4 style="margin: 0; color: #8b949e; text-transform: uppercase; letter-spacing: 1px;">AI Engine</h4>
+            <h1 style="color: #39d353; margin: 10px 0; font-size: 2.5em;">ONLINE</h1>
+        </div>
+    </div>
+
+    <div style="width: 100%; max-width: 350px; margin: 0 auto;">
+        <canvas id="threatChart"></canvas>
+    </div>
+
+</div>
 <script>
     
-    const API_BASE = ''; 
+  // 🌍 Auto-Detect: Local for testing, Render for Live Demo
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000' 
+    : 'https://binary-beasts-imqc.onrender.com'; // RENDER URL 
 
     let elementConfig = { 
         app_title: "AI Phishing Detector", 
@@ -660,7 +688,7 @@
 
         try {
             // NOTE: Change localhost to your deployed URL if you put this on Render/Vercel later!
-            const response = await fetch('/api/analyze-link', {       
+            const response = await fetch(`${API_BASE}/api/analyze-link`, {      
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url: url })
@@ -707,6 +735,9 @@
                     </div>
                 `;
             }
+
+            // THE DASHBOARD UPDATE HERE 
+            updateDashboard(data.isBlacklisted, data.threatType || "Link");
         } catch (err) {
             resultDiv.innerHTML = "❌ Connection Error. Is your server running?";
         }
@@ -856,6 +887,7 @@
     }
 
     if (window.lucide) lucide.createIcons();
+    updateDashboard(analysis.threatLevel !== 'safe', analysis.threatStatus);
 }
     function displayImagePreview(src) {
         const container = document.getElementById('imagePreviewContainer');
@@ -949,7 +981,73 @@
     if (window.lucide) {
         lucide.createIcons();
     } 
+</script> <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-  </script>
- </body>
+<script>
+// ==========================================
+// 📊 ENTERPRISE SOC DASHBOARD LOGIC
+// ==========================================
+
+// 1. Initialize the Chart
+const ctx = document.getElementById('threatChart').getContext('2d');
+const threatChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+        labels: ['Phishing Texts', 'Zero-Day URLs', 'Social Engineering', 'Safe Scans'],
+        datasets: [{
+            data: [0, 0, 0, 0], // ✅ START AT ZERO
+            backgroundColor: ['#ff9900', '#ff4444', '#cc00ff', '#39d353'],
+            borderWidth: 0,
+            hoverOffset: 4
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { 
+                position: 'bottom', 
+                labels: { color: '#c9d1d9', font: { family: 'Courier' } } 
+            }
+        },
+        cutout: '70%' // Makes the donut thinner and sleeker
+    }
+});
+
+// 2. The Live Update Variables
+let totalScans = 0;
+let totalThreats = 0;
+
+// 3. The Injection Function (Call this when a scan finishes!)
+function updateDashboard(isThreat, threatCategoryStr) {
+    // Increment total scans
+    totalScans++;
+    document.getElementById('stat-scans').innerText = totalScans.toLocaleString();
+    
+    if (isThreat) {
+        // Increment threats and flash the number
+        totalThreats++;
+        const threatElem = document.getElementById('stat-threats');
+        threatElem.innerText = totalThreats.toLocaleString();
+        
+        // Add a quick visual flash effect
+        threatElem.style.color = "#ffffff";
+        setTimeout(() => threatElem.style.color = "#ff4444", 300);
+
+        // Update the chart data
+        if (threatCategoryStr.includes("URL") || threatCategoryStr.includes("Link")) {
+            threatChart.data.datasets[0].data[1]++; // Zero-Day URLs
+        } else if (threatCategoryStr.includes("Social")) {
+            threatChart.data.datasets[0].data[2]++; // Social Engineering
+        } else {
+            threatChart.data.datasets[0].data[0]++; // Default to Phishing
+        }
+    } else {
+        threatChart.data.datasets[0].data[3]++; // Safe Scans
+    }
+    
+    // Animate the new chart data
+    threatChart.update();
+}
+</script>
+</body>
 </html>

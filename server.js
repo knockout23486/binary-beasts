@@ -593,5 +593,10 @@ function cleanupFiles(path1, path2) {
 
 
 
-const PORT = process.env.PORT || 8080; 
-app.listen(PORT, '0.0.0.0', () => console.log(`🛡️ Binary Beasts LIVE on port ${PORT}`));
+// 🚀 THE ULTIMATE DEPLOYMENT SETTING
+const PORT = process.env.PORT || 3000; 
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🛡️ Binary Beasts LIVE on port ${PORT}`);
+    console.log(`🦾 Systems: Gemini (Tier 1) | DeepSeek (Tier 2) | Llama (Tier 3)`);
+});
