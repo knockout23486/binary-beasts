@@ -7,6 +7,7 @@
   
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> 
   
   <style>
     * {
@@ -46,6 +47,27 @@
     .badge-gemini { background: linear-gradient(90deg, #4285F4, #9b72cb); color: white; box-shadow: 0 0 15px rgba(66, 133, 244, 0.3); }
     .badge-deepseek { background: linear-gradient(90deg, #0052D4, #4364F7); color: white; box-shadow: 0 0 15px rgba(0, 82, 212, 0.3); }
     .badge-llama { background: linear-gradient(90deg, #f46b45, #eea849); color: white; box-shadow: 0 0 15px rgba(244, 107, 69, 0.3); }
+
+    /* 🚨 NEW: MALICIOUS LINK BADGE WITH PULSE */
+    .badge-malicious { 
+        background: rgba(239, 68, 68, 0.2); 
+        color: #ef4444; 
+        border: 1px solid rgba(239, 68, 68, 0.5); 
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-weight: 700;
+        animation: pulse 2s infinite; /* Uses your existing pulse animation */
+    }
+
+    .badge-safe-link { 
+        background: rgba(16, 185, 129, 0.2); 
+        color: #10b981; 
+        border: 1px solid rgba(16, 185, 129, 0.5); 
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-weight: 700;
+    }
+
 
     .app-wrapper {
       width: 100%;
@@ -669,12 +691,34 @@ const API_BASE = window.location.hostname === 'localhost' || window.location.hos
         app_subtitle: "Advanced threat detection engine" 
     };
 
-    if (window.lucide) {
-        lucide.createIcons();
+    if (window.lucide) lucide.createIcons();
+
+    // 🛡️ FIX 1: The XSS Escape Function (Neutralizes Malicious AI Output)
+    function escapeHTML(str) {
+        if (!str) return '';
+        return String(str).replace(/[&<>"']/g, tag => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[tag]));
+    }
+
+    // ⏱️ FIX 2: The API Timeout Wrapper (Prevents UI Freezes)
+    async function fetchWithTimeout(url, options, timeout = 25000) { // 25s timeout for AI
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
+        try {
+            const res = await fetch(url, { ...options, signal: controller.signal });
+            return res;
+        } finally {
+            clearTimeout(id);
+        }
     }
 
     // ==========================================
-    // 🔗 LINK SNIPER LOGIC (WEB RISK + GEMINI)
+    // 🔗 LINK SNIPER LOGIC
     // ==========================================
     async function scanLink() {
         const url = document.getElementById('linkInput').value;
@@ -684,11 +728,10 @@ const API_BASE = window.location.hostname === 'localhost' || window.location.hos
 
         resultDiv.style.display = "block";
         resultDiv.style.background = "#333";
-        resultDiv.innerHTML = "⏳ Searching Google's Threat Database...";
+        resultDiv.innerHTML = "⏳ Searching Threat Database...";
 
         try {
-            // NOTE: Change localhost to your deployed URL if you put this on Render/Vercel later!
-            const response = await fetch(`${API_BASE}/api/analyze-link`, {      
+            const response = await fetchWithTimeout(`${API_BASE}/api/analyze-link`, {      
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url: url })
@@ -696,29 +739,34 @@ const API_BASE = window.location.hostname === 'localhost' || window.location.hos
 
             const data = await response.json();
 
-            // 🚨 FIX 1: Catch backend errors so it doesn't fake a "Safe" result!
             if (data.error) {
                 resultDiv.style.background = "rgba(245, 158, 11, 0.2)"; 
                 resultDiv.style.border = "1px solid #f59e0b";
                 resultDiv.innerHTML = `
                     <h4 style="color: #f59e0b; margin-top: 0;">⚠️ Scanner Offline</h4>
-                    <p style="margin-bottom: 0;">${data.error}</p>
+                    <p style="margin-bottom: 0;">${escapeHTML(data.error)}</p>
                 `;
-                return; // Stop running!
+                return;
             }
 
-            // 🚨 FIX 2: UI Feedback now includes the Safety Score and AI Engine badges!
-            if (data.isBlacklisted) {
+            const isActualThreat = data.safetyScore >= 50 || data.isBlacklisted === true || data.isBlacklisted === "true";
+            
+            // Apply XSS Escaping to all dynamic data before rendering HTML
+            const safeType = escapeHTML(data.threatType || 'Suspicious Link');
+            const safeExp = escapeHTML(data.explanation);
+            const safeEngine = escapeHTML(data.engineUsed || 'System');
+
+            if (isActualThreat) {
                 resultDiv.style.background = "rgba(220, 38, 38, 0.2)"; 
                 resultDiv.style.border = "1px solid #dc2626";
                 resultDiv.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: start;">
-                        <h4 style="color: #ef4444; margin-top: 0; margin-bottom: 10px;">🚨 BLACKLISTED: ${data.threatType}</h4>
+                        <h4 style="color: #ef4444; margin-top: 0; margin-bottom: 10px;">🚨 BLACKLISTED: ${safeType}</h4>
                         <span style="background: #ef4444; color: white; padding: 4px 8px; border-radius: 6px; font-weight: bold; font-size: 12px; border: 1px solid #b91c1c;">Score: ${data.safetyScore}/100</span>
                     </div>
-                    <p style="margin-bottom: 8px; font-size: 0.95rem;">${data.explanation}</p>
+                    <p style="margin-bottom: 8px; font-size: 0.95rem;">${safeExp}</p>
                     <div style="font-size: 11px; color: #9ca3af; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 8px;">
-                        🤖 Threat Intel powered by: <strong style="color: #00d9ff;">${data.engineUsed || 'System'}</strong>
+                        🤖 Threat Intel powered by: <strong style="color: #00d9ff;">${safeEngine}</strong>
                     </div>
                 `;
             } else {
@@ -727,180 +775,189 @@ const API_BASE = window.location.hostname === 'localhost' || window.location.hos
                 resultDiv.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: start;">
                         <h4 style="color: #4ade80; margin-top: 0; margin-bottom: 10px;">✅ SAFE LINK</h4>
-                        <span style="background: ${data.safetyScore < 90 ? '#eab308' : '#22c55e'}; color: ${data.safetyScore < 90 ? 'black' : 'white'}; padding: 4px 8px; border-radius: 6px; font-weight: bold; font-size: 12px;">Score: ${data.safetyScore}/100</span>
+                        <span style="background: ${data.safetyScore > 0 ? '#eab308' : '#22c55e'}; color: ${data.safetyScore > 0 ? 'black' : 'white'}; padding: 4px 8px; border-radius: 6px; font-weight: bold; font-size: 12px;">Score: ${data.safetyScore}/100</span>
                     </div>
-                    <p style="margin-bottom: 8px; font-size: 0.95rem;">${data.explanation}</p>
+                    <p style="margin-bottom: 8px; font-size: 0.95rem;">${safeExp}</p>
                     <div style="font-size: 11px; color: #9ca3af; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 8px;">
-                        🤖 Threat Intel powered by: <strong style="color: #00d9ff;">${data.engineUsed || 'System'}</strong>
+                        🤖 Threat Intel powered by: <strong style="color: #00d9ff;">${safeEngine}</strong>
                     </div>
                 `;
             }
 
-            // THE DASHBOARD UPDATE HERE 
-            updateDashboard(data.isBlacklisted, data.threatType || "Link");
+            updateDashboard(isActualThreat, data.threatType || "Link");
         } catch (err) {
-            resultDiv.innerHTML = "❌ Connection Error. Is your server running?";
+            resultDiv.innerHTML = "❌ Connection Error or Timeout. Is your server running?";
         }
     }
-    // ==========================================
-    // 🧹 CLEAR LINK SNIPER UI
-    // ==========================================
+
     function clearLink() {
-        // 1. Empty the text box
         document.getElementById('linkInput').value = "";
-        
-        // 2. Hide and empty the result box
         const resultDiv = document.getElementById('linkResult');
         resultDiv.style.display = "none";
         resultDiv.innerHTML = "";
     }
 
-
+    // ==========================================
+    // 🧠 MESSAGE ANALYSIS LOGIC
+    // ==========================================
     async function analyzeMessage(event = null) {
-    if (event && event.preventDefault) event.preventDefault();
+        if (event && event.preventDefault) event.preventDefault();
 
-    const button = document.querySelector('.btn-primary');
-    if (button.classList.contains('button-loading')) return;
+        const button = document.querySelector('.btn-primary');
+        if (button.classList.contains('button-loading')) return;
 
-    const messageText = document.getElementById('message').value.trim();
-    if (!messageText) return alert('Please enter a message to analyze');
+        const messageText = document.getElementById('message').value.trim();
+        if (!messageText) return alert('Please enter a message to analyze');
 
-    const originalText = button.innerHTML;
-    button.innerHTML = '<div class="loader"></div> Analyzing...';
-    button.classList.add('button-loading');
+        const originalText = button.innerHTML;
+        button.innerHTML = '<div class="loader"></div> Analyzing...';
+        button.classList.add('button-loading');
 
-    try {
-    const response = await fetch(`${API_BASE}/api/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: messageText })
-    });
-    
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.error || `Server error: ${response.status}`;
-        throw new Error(errorMessage);
-    }
+        try {
+            const response = await fetchWithTimeout(`${API_BASE}/api/analyze`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: messageText })
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `Server error: ${response.status}`);
+            }
 
-    const analysis = await response.json();
-        
-        analysis.threatIcon = analysis.threatLevel === 'high' ? '🚨' : analysis.threatLevel === 'medium' ? '⚠️' : '✅';
-        analysis.threatStatus = analysis.threatLevel === 'high' ? 'Phishing Detected' : analysis.threatLevel === 'medium' ? 'Suspicious' : 'Safe';
-        
-        displayResults(analysis);
-    } catch (error) {
-        console.error("The AI Error is:", error);
-        alert(`Shields Up! 🛡️ Analysis failed.\n\nError: ${error.message}\n\nPlease ensure the Binary Beasts backend is active and try again.`);
-    } finally {
-        button.innerHTML = originalText;
-        button.classList.remove('button-loading');
-    }
-}
-   function displayResults(analysis) {
-    const resultDiv = document.getElementById('result');
-    const statusText = document.getElementById('threatText');
-    const badge = document.getElementById('model-badge');
-
-    // 1. Reset state to prevent flicker
-    resultDiv.style.display = 'block';
-    statusText.classList.remove('scanning-glow');
-    badge.style.display = 'none'; 
-    badge.className = 'model-badge-base'; // Wipes old colors, keeps structural base
-
-    // ✨ UPDATE THE AI BADGE LOGIC
-    if (analysis.usedModel) {
-        badge.style.display = 'inline-block';
-        if (analysis.usedModel === 'gemini') {
-            badge.innerText = "🛡️ Powered by Google Gemini";
-            badge.classList.add("badge-gemini");
-        } else if (analysis.usedModel === 'deepseek') {
-            badge.innerText = "🧠 Fallback: DeepSeek-R1";
-            badge.classList.add("badge-deepseek");
-        } else if (analysis.usedModel === 'llama') {
-            badge.innerText = "🦙 Fallback: Meta Llama 3.1";
-            badge.classList.add("badge-llama");
-        } else {
-            badge.innerText = "⚙️ AI Model Active";
-            badge.classList.add("badge-gemini"); 
+            const analysis = await response.json();
+            analysis.threatIcon = analysis.threatLevel === 'high' ? '🚨' : analysis.threatLevel === 'medium' ? '⚠️' : '✅';
+            analysis.threatStatus = analysis.threatLevel === 'high' ? 'Phishing Detected' : analysis.threatLevel === 'medium' ? 'Suspicious' : 'Safe';
+            
+            displayResults(analysis);
+        } catch (error) {
+            console.error("The AI Error is:", error);
+            alert(`Shields Up! 🛡️ Analysis failed.\n\nError: ${error.message}\n\nPlease ensure the Binary Beasts backend is active.`);
+        } finally {
+            button.innerHTML = originalText;
+            button.classList.remove('button-loading');
         }
     }
-    
-    document.getElementById('threatIcon').textContent = analysis.threatIcon;
-    document.getElementById('threatText').textContent = analysis.threatStatus;
-    
-    const riskEl = document.getElementById('risk');
-    riskEl.className = 'risk-dot risk-' + (analysis.threatLevel || 'safe');
-    
-    const riskTexts = { high: '🔴 High Risk', medium: '🟡 Medium Risk', safe: '🟢 Safe' };
-    document.getElementById('riskText').textContent = riskTexts[analysis.threatLevel] || 'Safe'; 
-    document.getElementById('threatScore').textContent = (analysis.threatScore || 0) + '%';
-    
-    document.getElementById('linkCount').textContent = (analysis.detectedLinks || []).length;
-    document.getElementById('flagCount').textContent = (analysis.detectedFlags || []).length;
 
-    const explanationList = document.getElementById('explanationList');
-    explanationList.innerHTML = '';
-    const flags = analysis.detectedFlags || [];
-    
-    if (flags.length === 0) {
-        explanationList.innerHTML = '<li class="explanation-item"><i data-lucide="check"></i><span>No obvious threats detected</span></li>';
-    } else {
-        flags.forEach(flag => {
-            const li = document.createElement('li');
-            li.className = 'explanation-item';
-            li.innerHTML = `<i data-lucide="alert-circle"></i><span>${flag.text || flag}</span>`;
-            explanationList.appendChild(li);
-        });
+    function displayResults(analysis) {
+        const resultDiv = document.getElementById('result');
+        const statusText = document.getElementById('threatText');
+        const badge = document.getElementById('model-badge');
+
+        resultDiv.style.display = 'block';
+        statusText.classList.remove('scanning-glow');
+        badge.style.display = 'none'; 
+        badge.className = 'model-badge-base'; 
+
+        if (analysis.usedModel) {
+            badge.style.display = 'inline-block';
+            if (analysis.usedModel === 'gemini') {
+                badge.innerText = "🛡️ Powered by Google Gemini";
+                badge.classList.add("badge-gemini");
+            } else if (analysis.usedModel === 'deepseek') {
+                badge.innerText = "🧠 Fallback: DeepSeek-R1";
+                badge.classList.add("badge-deepseek");
+            } else if (analysis.usedModel === 'llama') {
+                badge.innerText = "🦙 Fallback: Meta Llama 3.1";
+                badge.classList.add("badge-llama");
+            }
+        }
+        
+        document.getElementById('threatIcon').textContent = analysis.threatIcon;
+        document.getElementById('threatText').textContent = analysis.threatStatus;
+        
+        const riskEl = document.getElementById('risk');
+        riskEl.className = 'risk-dot risk-' + (analysis.threatLevel || 'safe');
+        
+        const riskTexts = { high: '🔴 High Risk', medium: '🟡 Medium Risk', safe: '🟢 Safe' };
+        document.getElementById('riskText').textContent = riskTexts[analysis.threatLevel] || 'Safe'; 
+        document.getElementById('threatScore').textContent = (analysis.threatScore || 0) + '%';
+        
+        document.getElementById('linkCount').textContent = (analysis.detectedLinks || []).length;
+        document.getElementById('flagCount').textContent = (analysis.detectedFlags || []).length;
+
+        const explanationList = document.getElementById('explanationList');
+        explanationList.innerHTML = '';
+        const flags = analysis.detectedFlags || [];
+        
+        if (flags.length === 0) {
+            explanationList.innerHTML = '<li class="explanation-item"><i data-lucide="check"></i><span>No obvious threats detected</span></li>';
+        } else {
+            flags.forEach(flag => {
+                const li = document.createElement('li');
+                li.className = 'explanation-item';
+                // XSS Defense: Escape the flag text
+                const safeText = escapeHTML(flag.text || flag);
+                li.innerHTML = `<i data-lucide="alert-circle"></i><span>${safeText}</span>`;
+                explanationList.appendChild(li);
+            });
+        }
+
+        const linksSection = document.getElementById('linksSection');
+        const linksList = document.getElementById('linksList');
+        linksList.innerHTML = '';
+        
+        const links = analysis.detectedLinks || [];
+        if (links.length > 0) {
+            linksSection.style.display = 'block';
+            links.forEach(linkObj => {
+                const li = document.createElement('li');
+                const isMalicious = linkObj.reputation !== 'Safe';
+                const badgeClass = isMalicious ? 'badge-malicious' : 'badge-safe-link';
+                
+                li.className = `link-item flex flex-col items-start gap-1 p-3 bg-slate-800/40 rounded-lg border-l-4 mb-2 ${isMalicious ? 'border-red-500' : 'border-green-500'}`;
+
+                // XSS Defense: Escape link data
+                const safeUrl = escapeHTML(linkObj.url || 'Unknown Link');
+                const safeRep = escapeHTML(linkObj.reputation || 'Analyzing');
+                const safeReason = escapeHTML(linkObj.reason || 'Source: AI Threat Intelligence');
+
+                li.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="link" class="w-4 h-4 text-purple-400"></i>
+                        <span class="font-mono text-sm text-white">${safeUrl}</span>
+                    </div>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded ${badgeClass}">
+                            ${isMalicious ? '⚠️ ' : '🛡️ '}${safeRep}
+                        </span>
+                        <span class="text-[11px] text-slate-400 italic">${safeReason}</span>
+                    </div>
+                `;
+                linksList.appendChild(li);
+            });
+            linksSection.style.display = 'block'; 
+        } else {
+            linksSection.style.display = 'none';
+        }
+
+        if (window.lucide) window.lucide.createIcons();
+        updateDashboard(analysis.threatLevel !== 'safe', analysis.threatStatus);
     }
 
-    const linksSection = document.getElementById('linksSection');
-    const linksList = document.getElementById('linksList');
-    linksList.innerHTML = '';
-    
-    const links = analysis.detectedLinks || [];
-    if (links.length > 0) {
-        linksSection.style.display = 'block';
-        links.forEach(linkObj => {
-            const li = document.createElement('li');
-            
-            const isMalicious = linkObj.reputation !== 'Safe';
-            const badgeColor = isMalicious ? 'text-red-400 border-red-500/50' : 'text-green-400 border-green-500/50';
-            
-            li.className = `link-item flex flex-col items-start gap-1 p-3 bg-slate-800/40 rounded-lg border-l-4 mb-2 ${isMalicious ? 'border-red-500' : 'border-green-500'}`;
-
-            li.innerHTML = `
-                <div class="flex items-center gap-2">
-                    <i data-lucide="link" class="w-4 h-4 text-purple-400"></i>
-                    <span class="font-mono text-sm text-white">${linkObj.url || linkObj}</span>
-                </div>
-                <div class="flex items-center gap-2 mt-1">
-                    <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-slate-900 border ${badgeColor}">
-                        ${isMalicious ? '⚠️ ' : '🛡️ '}${linkObj.reputation || 'Analyzing...'}
-                    </span>
-                    <span class="text-[11px] text-slate-400 italic">${linkObj.reason || 'Source: AI Threat Intelligence'}</span>
-                </div>
-            `;
-            linksList.appendChild(li);
-        });
-    } else {
-        linksSection.style.display = 'none';
-    }
-
-    if (window.lucide) lucide.createIcons();
-    updateDashboard(analysis.threatLevel !== 'safe', analysis.threatStatus);
-}
+    // ==========================================
+    // 📸 IMAGE UPLOAD & OCR LOGIC
+    // ==========================================
     function displayImagePreview(src) {
         const container = document.getElementById('imagePreviewContainer');
         container.innerHTML = `<img src="${src}" style="max-width:100%; border-radius:8px;">`;
     }
+
     async function handleImageUpload(event) {
-        const file = event.target.files[0] || (event.dataTransfer && event.dataTransfer.files[0]);
+        const file = event.target.files ? event.target.files[0] : (event.dataTransfer && event.dataTransfer.files[0]);
         if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-        alert("Image must be smaller than 5MB");
-        return;
-    }
+        // 🛡️ FIX 3: File Type Validation (Blocks malicious non-images)
+        const validTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+        if (!validTypes.includes(file.type)) {
+            alert("Security Alert: Only PNG and JPG images are allowed.");
+            return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+            alert("Image must be smaller than 5MB");
+            return;
+        }
 
         const analyzeBtn = document.querySelector('.btn-primary');
         const originalBtnText = analyzeBtn.innerHTML;
@@ -913,43 +970,41 @@ const API_BASE = window.location.hostname === 'localhost' || window.location.hos
         const formData = new FormData();
         formData.append('image', file);
 
-       try {
-        const statusText = document.getElementById('threatText');
-        const resultDiv = document.getElementById('result');
-        
-        resultDiv.style.display = 'block';
-        
-        statusText.classList.add('scanning-glow'); 
-        statusText.textContent = "🔍 Scanning Image...";
-
-        setTimeout(() => { statusText.textContent = "🧠 Extracting Text..."; }, 2000);
-        setTimeout(() => { statusText.textContent = "🛡️ Analyzing with AI..."; }, 4000);
-
-        const response = await fetch(`${API_BASE}/api/ocr`, {
-            method: 'POST',
-            body: formData
-        });
-
-        if (!response.ok) throw new Error("OCR Failed");
-
-        const data = await response.json();
-        
-        if (data.extractedText) {
-            document.getElementById('message').value = data.extractedText;
-            document.getElementById('ocrSection').style.display = 'block';
-            document.getElementById('ocrText').textContent = data.extractedText;
+        try {
+            const statusText = document.getElementById('threatText');
+            const resultDiv = document.getElementById('result');
             
+            resultDiv.style.display = 'block';
+            statusText.classList.add('scanning-glow'); 
+            statusText.textContent = "🔍 Scanning Image...";
+
+            setTimeout(() => { statusText.textContent = "🧠 Extracting Text..."; }, 2000);
+            setTimeout(() => { statusText.textContent = "🛡️ Analyzing with AI..."; }, 4000);
+
+            const response = await fetchWithTimeout(`${API_BASE}/api/ocr`, {
+                method: 'POST',
+                body: formData
+            }, 30000); // 30s timeout for heavy image processing
+
+            if (!response.ok) throw new Error("OCR Failed");
+
+            const data = await response.json();
+            
+            if (data.extractedText) {
+                document.getElementById('message').value = data.extractedText;
+                document.getElementById('ocrSection').style.display = 'block';
+                // XSS Defense: Use textContent (which is natively safe) instead of innerHTML
+                document.getElementById('ocrText').textContent = data.extractedText; 
+                
+                statusText.classList.remove('scanning-glow');
+                setTimeout(() => analyzeMessage(), 500);
+            }
+        } catch (error) {
+            const statusText = document.getElementById('threatText');
             statusText.classList.remove('scanning-glow');
-            
-            setTimeout(() => analyzeMessage(), 500);
-        }
-    } catch (error) {
-        const statusText = document.getElementById('threatText');
-        statusText.classList.remove('scanning-glow');
-        
-        console.error("The hidden error is:", error);
-        alert(`Analysis failed!\nError: ${error.message}\nEnsure your Cloud Server is active.`);
-    } finally {
+            console.error("The hidden error is:", error);
+            alert(`Analysis failed!\nError: ${error.message}\nEnsure your Cloud Server is active.`);
+        } finally {
             document.getElementById('imageUpload').value = '';
             analyzeBtn.innerHTML = originalBtnText;
             analyzeBtn.classList.remove('button-loading');
@@ -969,85 +1024,83 @@ const API_BASE = window.location.hostname === 'localhost' || window.location.hos
     const dragDropZone = document.querySelector('.drag-drop-zone');
     dragDropZone.addEventListener('dragover', (e) => { e.preventDefault(); dragDropZone.classList.add('dragover'); });
     dragDropZone.addEventListener('dragleave', () => { dragDropZone.classList.remove('dragover'); });
+    
+    // 🛡️ FIX 4: Safer Drag & Drop Event Handling
     dragDropZone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      dragDropZone.classList.remove('dragover');
-      
-      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        handleImageUpload({ target: { files: e.dataTransfer.files } });
-      }
+        e.preventDefault();
+        dragDropZone.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const file = e.dataTransfer.files[0];
+            handleImageUpload({ target: { files: [file] } });
+        }
     });
 
-    if (window.lucide) {
-        lucide.createIcons();
-    } 
-</script> <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    // ==========================================
+    // 📊 ENTERPRISE SOC DASHBOARD LOGIC
+    // ==========================================
+    
+    // 1. Load ALL state from LocalStorage (Numbers AND Chart Data)
+    let totalScans = parseInt(localStorage.getItem('bb_totalScans')) || 0;
+    let totalThreats = parseInt(localStorage.getItem('bb_totalThreats')) || 0;
+    let chartData = JSON.parse(localStorage.getItem('bb_chartData')) || [0, 0, 0, 0];
 
-<script>
-// ==========================================
-// 📊 ENTERPRISE SOC DASHBOARD LOGIC
-// ==========================================
-
-// 1. Initialize the Chart
-const ctx = document.getElementById('threatChart').getContext('2d');
-const threatChart = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-        labels: ['Phishing Texts', 'Zero-Day URLs', 'Social Engineering', 'Safe Scans'],
-        datasets: [{
-            data: [0, 0, 0, 0], // ✅ START AT ZERO
-            backgroundColor: ['#ff9900', '#ff4444', '#cc00ff', '#39d353'],
-            borderWidth: 0,
-            hoverOffset: 4
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: {
-            legend: { 
-                position: 'bottom', 
-                labels: { color: '#c9d1d9', font: { family: 'Courier' } } 
-            }
-        },
-        cutout: '70%' // Makes the donut thinner and sleeker
-    }
-});
-
-// 2. The Live Update Variables
-let totalScans = 0;
-let totalThreats = 0;
-
-// 3. The Injection Function (Call this when a scan finishes!)
-function updateDashboard(isThreat, threatCategoryStr) {
-    // Increment total scans
-    totalScans++;
+    // 2. Load initial numbers on page load
     document.getElementById('stat-scans').innerText = totalScans.toLocaleString();
-    
-    if (isThreat) {
-        // Increment threats and flash the number
-        totalThreats++;
-        const threatElem = document.getElementById('stat-threats');
-        threatElem.innerText = totalThreats.toLocaleString();
-        
-        // Add a quick visual flash effect
-        threatElem.style.color = "#ffffff";
-        setTimeout(() => threatElem.style.color = "#ff4444", 300);
+    document.getElementById('stat-threats').innerText = totalThreats.toLocaleString();
 
-        // Update the chart data
-        if (threatCategoryStr.includes("URL") || threatCategoryStr.includes("Link")) {
-            threatChart.data.datasets[0].data[1]++; // Zero-Day URLs
-        } else if (threatCategoryStr.includes("Social")) {
-            threatChart.data.datasets[0].data[2]++; // Social Engineering
-        } else {
-            threatChart.data.datasets[0].data[0]++; // Default to Phishing
+    // 3. Initialize the Chart WITH saved data
+    const ctx = document.getElementById('threatChart').getContext('2d');
+    const threatChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Phishing Texts', 'Zero-Day URLs', 'Social Engineering', 'Safe Scans'],
+            datasets: [{
+                data: chartData, // 👈 Now it loads the saved slices!
+                backgroundColor: ['#ff9900', '#ff4444', '#cc00ff', '#39d353'],
+                borderWidth: 0,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom', labels: { color: '#c9d1d9', font: { family: 'Courier' } } }
+            },
+            cutout: '70%'
         }
-    } else {
-        threatChart.data.datasets[0].data[3]++; // Safe Scans
+    });
+
+    // 4. The Sync Function
+    function updateDashboard(isThreat, threatCategoryStr) {
+        totalScans++;
+        localStorage.setItem('bb_totalScans', totalScans);
+        document.getElementById('stat-scans').innerText = totalScans.toLocaleString();
+        
+        if (isThreat) {
+            totalThreats++;
+            localStorage.setItem('bb_totalThreats', totalThreats);
+            const threatElem = document.getElementById('stat-threats');
+            threatElem.innerText = totalThreats.toLocaleString();
+            
+            threatElem.style.color = "#ffffff";
+            setTimeout(() => threatElem.style.color = "#ff4444", 300);
+
+            // Update Chart Array
+            if (threatCategoryStr.includes("URL") || threatCategoryStr.includes("Link")) {
+                chartData[1]++; 
+            } else if (threatCategoryStr.includes("Social")) {
+                chartData[2]++; 
+            } else {
+                chartData[0]++; 
+            }
+        } else {
+            chartData[3]++; 
+        }
+        
+        // Save the new chart array to LocalStorage and update UI
+        localStorage.setItem('bb_chartData', JSON.stringify(chartData));
+        threatChart.update();
     }
-    
-    // Animate the new chart data
-    threatChart.update();
-}
 </script>
 </body>
 </html>

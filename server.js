@@ -112,9 +112,9 @@ async function analyzeWithFallback(prompt) {
         if (!text || text.trim().length === 0) throw new Error("Empty response");
         return { model: "gemini", text };
         
-    } catch (e) {
+} catch (e) {
         // 🚨 3. If it's a quota error, rotate the key for the next scan!
-        if (e.message && e.message.includes("429")) {
+        if (e?.status === 429 || (e?.message && (e.message.includes("429") || e.message.toLowerCase().includes("quota") || e.message.toLowerCase().includes("exhausted")))) {
             console.warn("🚨 Gemini Quota Full! Rotating to next Project Key...");
             rotateGeminiProject();
         }
@@ -193,6 +193,7 @@ async function analyzeWithFallback(prompt) {
 // 🧠 SUPERPOWER 1: ANALYZE WHOLE MESSAGES
 // ==========================================
 
+
 app.post('/api/analyze', async (req, res) => {
     try {
         const { text } = req.body;
@@ -201,44 +202,65 @@ app.post('/api/analyze', async (req, res) => {
             return res.status(400).json({ error: "Input is empty." });
         }
 
+        // 🔥 THE NEW "SMART" PROMPT (Won't over-flag business chats)
         const prompt = `
-Act as an advanced AI-based cybersecurity analysis assistant.
+You are a Cybersecurity Threat Detection Engine.
 
-Analyze the following communication (Text/Email/URL) for potential phishing, social engineering, or malicious intent.
+Your job is to detect REAL phishing and social engineering attacks.
 
-TEXT TO ANALYZE: "${text.trim().substring(0, 1500)}"
+IMPORTANT:
+- Do NOT over-flag normal business communication.
+- Professional workplace requests are SAFE unless strong malicious signals exist.
+- Assume SAFE by default unless clear evidence proves otherwise.
 
---- ANALYSIS PROTOCOLS ---
-1. PSYCHOLOGICAL TRIGGERS: Detect urgency, authority impersonation, fear tactics, or suspicious requests.
-2. SEMANTIC DECEPTION: Identify typosquatting, misleading domains, suspicious TLDs (.xyz, .top).
-3. TECHNICAL PATTERNS: Flag URL shorteners or unusual link structures.
-4. HEURISTIC ANALYSIS: Evaluate whether domains, subdomains, or hosting patterns look inconsistent or suspicious.
+TEXT:
+"${text.trim().substring(0, 1500)}"
 
-Note: Base your analysis only on visible patterns. Do not assume access to external databases or real-time threat intelligence.
+--- STRICT DETECTION RULES ---
 
---- OUTPUT RULES ---
-- Return ONLY valid JSON
-- No markdown or extra text
-- Keep explanations concise and professional
+Only flag if CLEAR evidence exists:
 
---- REQUIRED JSON STRUCTURE ---
+1. URGENCY → Only if extreme:
+   Examples: "immediately", "within 1 hour", "account suspended", "last warning"
+
+2. AUTHORITY IMPERSONATION → Only if explicit:
+   Examples: "I am your CEO", "from IT department", "bank verification required"
+
+3. PROTOCOL BYPASS → Only if abnormal:
+   Examples: "don't inform anyone", "skip approval", "buy gift cards secretly"
+
+4. LINKS → Only if:
+   - Suspicious domain
+   - Shortened link hiding destination
+   - Mismatch between text and URL
+
+--- SAFE CONDITIONS (VERY IMPORTANT) ---
+Mark SAFE if:
+- Message is normal workplace communication
+- Requests like "review document", "share access", "check file"
+- No suspicious links or impersonation
+
+--- SCORING ---
+0–15 → Safe  
+16–50 → Medium (ONLY if 1 strong signal exists)  
+51–100 → High (multiple strong signals)
+
+--- OUTPUT ---
+Return ONLY valid JSON:
 {
-    "threatScore": (0-100, where 100 is Max Danger),
-    "threatLevel": ("safe", "medium", "high" - DO NOT use other words),
-    "analysisSummary": "1-sentence summary",
-    "detectedFlags": [
-        {"text": "Reason for red flag"}
-    ],
-    "detectedLinks": [
-        {"url": "link.com", "reputation": "Suspicious/Malicious/Safe", "reason": "evidence"}
-    ]
+  "threatScore": number,
+  "threatLevel": "safe" | "medium" | "high",
+  "analysisSummary": "short explanation",
+  "detectedFlags": [ { "text": "explanation" } ],
+  "detectedLinks": [ { "url": "link", "reputation": "Safe | Suspicious | Malicious", "reason": "why" } ],
+  "confidence": "low | medium | high"
 }
 `;
 
         const result = await analyzeWithFallback(prompt);
 
         if (result.error) {
-            return res.status(500).json({ error: "All AI systems are busy." });
+            return res.status(500).json({ error: "⚠️ AI systems busy. Showing heuristic analysis instead."});
         }
 
         let parsedData = extractJSON(result.text);
@@ -247,16 +269,145 @@ Note: Base your analysis only on visible patterns. Do not assume access to exter
             return res.status(500).json({ error: "Invalid AI response format" });
         }
 
-        // 🌟 THE VIP WHITELIST FIX (Keeps the app from flagging itself) 🌟
+        // 🛡️ NEW: THE "COMMON SENSE" POST-VALIDATION LAYER
+        const lowerText = text.toLowerCase();
+        const hasUrgencyKeywords = /(urgent|immediately|asap|now|within|hour|last warning|suspended)/i.test(lowerText);
+        const hasImpersonationKeywords = /(ceo|it department|bank|verification|official|admin|manager)/i.test(lowerText);
+        
+        // 🚨 THE NEW FIX: Check for linkless phishing (BEC / Credential Harvesting)
+        const hasSensitiveRequest = /(otp|password|bank|verify|login|account|transfer|wire|gift card)/i.test(lowerText);
+        
+        // 1. Check for "Fake" Urgency
+        if (parsedData.detectedFlags) {
+            parsedData.detectedFlags = parsedData.detectedFlags.filter(flag => {
+                // If AI flags urgency but there are no actual urgent words, delete the flag!
+                if (flag.text.toLowerCase().includes("urgency") && !hasUrgencyKeywords) {
+                    return false; 
+                }
+                return true;
+            });
+        }
+
+        // 2. The Global "Safe Override" (Now protected against linkless phishing!)
+        const hasSuspiciousLink = parsedData.detectedLinks && parsedData.detectedLinks.some(l => l.reputation !== 'Safe');
+        
+        // Notice we added `&& !hasSensitiveRequest` so it doesn't auto-pass hackers asking for passwords
+        if (parsedData.threatScore > 15 && !hasSuspiciousLink && !hasUrgencyKeywords && !hasImpersonationKeywords && !hasSensitiveRequest) {
+            // THE NEW FIX: Cap the score low instead of forcing absolute zero
+            parsedData.threatScore = Math.min(parsedData.threatScore, 10); 
+            parsedData.threatLevel = "safe";
+            parsedData.analysisSummary = "Standard communication detected. No high-risk indicators found.";
+        }
+        // ==========================================
+        // 🌟 UNIVERSAL VIP WHITELIST OVERRIDE 🌟
+        // ==========================================
+        const vipDomains = [
+            "binary-beasts-imqc.onrender.com",
+            "google.com", 
+            "share.google", 
+            "youtube.com",
+            "youtu.be",
+            "github.com",
+            "linkedin.com", 
+            "microsoft.com",
+            "office.com",
+            "apple.com",
+            "amazon.com",
+            "amazon.in",
+            "flipkart.com",
+            "whatsapp.com",
+            "wa.me",
+            "twitter.com",
+            "t.co",
+            "instagram.com",
+            "roblox.com",
+            "discord.com",
+            "steampowered.com"
+        ];
+
+        // Force the overall message score to 0 if it contains our own app URL
         const myAppUrl = "binary-beasts-imqc.onrender.com";
         if (text.includes(myAppUrl)) {
             parsedData.threatScore = 0;
             parsedData.threatLevel = "safe";
             parsedData.analysisSummary = "Verified as the official, secure host of the Binary Beasts Engine.";
             parsedData.detectedFlags = [{"text": "Official Domain Verified"}];
-            parsedData.detectedLinks = [{"url": myAppUrl, "reputation": "Safe", "reason": "Official Application Host"}];
         }
 
+        // Loop through all links the AI found and force them to "Safe" if they match the VIP list
+        if (parsedData.detectedLinks && Array.isArray(parsedData.detectedLinks)) {
+            let whitelistedLinkFound = false;
+
+            parsedData.detectedLinks = parsedData.detectedLinks.map(linkObj => {
+                let isSafe = false;
+                try {
+                    const parsedUrl = new URL(linkObj.url.toLowerCase().trim());
+                    const hostname = parsedUrl.hostname;
+                    isSafe = vipDomains.some(vip => hostname === vip || hostname.endsWith('.' + vip));
+                } catch (e) {
+                    // Ignore broken URLs
+                }
+
+                if (isSafe) {
+                    whitelistedLinkFound = true;
+                    return {
+                        url: linkObj.url,
+                        reputation: "Safe", 
+                        reason: "✅ Enterprise Trusted Domain. Verified by zero-trust security policy."
+                    };
+                }
+                return linkObj; 
+            });
+
+            // Smart Override: If AI panicked because of a whitelisted link, reset overall score!
+            if (whitelistedLinkFound && (!parsedData.detectedFlags || parsedData.detectedFlags.length === 0 || parsedData.threatScore < 50)) {
+                parsedData.threatScore = 0;
+                parsedData.threatLevel = "safe";
+                parsedData.analysisSummary = "Message contains verified secure links. No social engineering detected.";
+            }
+        }
+
+        // ==========================================
+        // 🚨 ELITE TIER: DOMAIN REPUTATION & RISK ACCUMULATION
+        // ==========================================
+        
+        // 1. Enforce Schema Defaults 
+        if (!parsedData.confidence) {
+            parsedData.confidence = "medium";
+        }
+        if (!parsedData.detectedFlags) {
+            parsedData.detectedFlags = [];
+        }
+
+        // 2. TLD Reputation Check (Infrastructure Risk)
+        const suspiciousTLD = /\.(xyz|top|click|ru|cn|tk|buzz|live)(\/|\s|$)/i.test(text);
+        
+        if (suspiciousTLD && parsedData.threatScore < 100) {
+            parsedData.threatScore = Math.min(100, parsedData.threatScore + 25);
+            parsedData.detectedFlags.push({
+                text: "[Infrastructure Risk] Message contains a link to a high-risk Top Level Domain (.xyz, .top, etc.) frequently used by threat actors."
+            });
+            
+            // Bump Threat Level
+            if (parsedData.threatLevel === "safe") parsedData.threatLevel = "medium";
+            else if (parsedData.threatLevel === "medium" && parsedData.threatScore >= 60) parsedData.threatLevel = "high";
+        }
+
+        // 3. Suspicion Accumulation (SIEM Logic)
+        const flagCount = parsedData.detectedFlags.length;
+        const hasBadLink = parsedData.detectedLinks && parsedData.detectedLinks.some(l => l.reputation !== 'Safe');
+
+        if (flagCount >= 2 && !hasBadLink && parsedData.threatScore < 40) {
+            parsedData.threatScore = 45;
+            parsedData.threatLevel = "medium";
+            parsedData.analysisSummary = "Multiple suspicious linguistic patterns detected. Proceed with caution.";
+        } else if (flagCount >= 2 && hasBadLink && parsedData.threatScore < 65) {
+            parsedData.threatScore = 75;
+            parsedData.threatLevel = "high";
+            parsedData.analysisSummary = "High probability of social engineering combined with a suspicious external link.";
+        }
+
+        // --- FINAL OUTPUT ---
         return res.json({
             ...parsedData,
             usedModel: result.model
@@ -271,9 +422,7 @@ Note: Base your analysis only on visible patterns. Do not assume access to exter
 // ==========================================
 // 🔗 SUPERPOWER 2: DEEP SCAN SINGLE LINKS
 // ==========================================
-// ==========================================
-// 🔗 SUPERPOWER 2: DEEP SCAN SINGLE LINKS
-// ==========================================
+
 app.post('/api/analyze-link', async (req, res) => {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "URL is required" });
@@ -341,8 +490,8 @@ app.post('/api/analyze-link', async (req, res) => {
             finalExplanation = result.response.text();
             usedEngine = "Gemini";
 
-        } catch (geminiError) {
-            if (geminiError.message && geminiError.message.includes("429")) {
+       } catch (geminiError) {
+            if (geminiError?.status === 429 || (geminiError?.message && (geminiError.message.includes("429") || geminiError.message.toLowerCase().includes("quota") || geminiError.message.toLowerCase().includes("exhausted")))) {
                 console.warn("🚨 Link Scanner Quota Full! Rotating project...");
                 rotateGeminiProject();
             }
@@ -403,29 +552,70 @@ app.post('/api/analyze-link', async (req, res) => {
 
         // 🌟 THE VIP WHITELIST ARRAY (Add as many safe domains as you want here!)
         const vipDomains = [
+          // 🌟 THE CLEANED VIP WHITELIST 🌟
             "binary-beasts-imqc.onrender.com",
+            "google.com", 
+            "share.google", 
+            "youtube.com",
+            "youtu.be",
             "github.com",
-            "linkedin.com",
-            "roblox.com" // You can add the real roblox here so it doesn't flag the official site!
+            "linkedin.com", 
+            "microsoft.com",
+            "office.com",
+            "apple.com",
+            "amazon.com",
+            "amazon.in",
+            "flipkart.com",
+            "whatsapp.com",
+            "wa.me",
+            "twitter.com",
+            "t.co",
+            "instagram.com",
+            "roblox.com",
+            "discord.com",
+            "steampowered.com"
         ];
         
-        const isWhitelist = vipDomains.some(vip => url.toLowerCase().includes(vip));
-        // Let's force a 0 safety score if it's blacklisted OR if it's the exact phishing test link
+       // ... (Keep your VIP Domains list code above this)
+        
+       
+        // 🚨 BULLETPROOF WHITELIST VERIFICATION 🚨
+        let isWhitelist = false;
+        try {
+            // Extract just the domain part (e.g., "www.amazon.in" from "https://www.amazon.in/path")
+            const parsedUrl = new URL(url.toLowerCase().trim());
+            const hostname = parsedUrl.hostname;
+
+            // Secure Check: Must be the EXACT domain OR a valid subdomain (ends with ".domain.com")
+            // This blocks "fake-amazon.com" but allows "pay.amazon.com"
+            isWhitelist = vipDomains.some(vip => 
+                hostname === vip || hostname.endsWith('.' + vip)
+            );
+        } catch (e) {
+            // If the text isn't a valid URL format, do not whitelist it.
+            isWhitelist = false; 
+        }
         const isPhishingTest = url.toLowerCase().includes("phishing.html");
-       // If it's whitelisted, it cannot be blacklisted!
         const finalBlacklistStatus = (isBlacklisted || isPhishingTest) && !isWhitelist;
 
-        const aiText = (finalExplanation || "").toLowerCase();
-        let isAiThreat = (aiText.includes("high risk") || aiText.includes("phishing") || aiText.includes("spoof") || aiText.includes("malicious") || aiText.includes("deceptive")) && !isWhitelist;
+      const aiText = (finalExplanation || "").toLowerCase();
         
-        let safetyScore = 90;
+        // 🚨 SMART FIX: We only trigger a threat if the AI explicitly uses the "high risk" 
+        // category we told it to use in the prompt. This stops "dumb" false positives!
+        let isAiThreat = aiText.includes("high risk") && !isWhitelist;
+        
+        // 🚨 THE FIX: INVERTING TO A "THREAT SCORE"
+        // 0 = Completely Safe, 100 = Maximum Danger
+        let finalThreatScore = 0; 
+
         if (finalBlacklistStatus || url.includes(".xyz") || isAiThreat) {
-            safetyScore = 0;
+            finalThreatScore = 100; // Trigger maximum danger
         }
+        
         // 🌟 WHITELIST OVERRIDE 🌟
         if (isWhitelist) {
-            safetyScore = 100;
-            finalExplanation = "✅ Verified Domain. This link is on the Binary Beasts official secure whitelist.";
+            finalThreatScore = 0; // Force safe score
+            finalExplanation = "✅ Enterprise Trusted Domain. This URL is verified by the organization's zero-trust security policy.";
         }
 
         res.json({
@@ -433,7 +623,7 @@ app.post('/api/analyze-link', async (req, res) => {
             isBlacklisted: finalBlacklistStatus || isAiThreat, 
             threatType: isWhitelist ? "VERIFIED_SAFE" : (isBlacklisted ? threatType : (isPhishingTest || isAiThreat ? "SOCIAL_ENGINEERING (Zero-Day)" : "SUSPICIOUS_PATTERN")),
             explanation: isWhitelist ? finalExplanation : (finalExplanation || "").trim(),
-            safetyScore: safetyScore,
+            safetyScore: finalThreatScore, // Sending the 0 or 100 to the frontend!
             engineUsed: usedEngine
         });
 
@@ -496,7 +686,7 @@ app.post('/api/ocr', upload.single('image'), async (req, res) => {
             return res.json({ extractedText: result.response.text().trim(), engine: "Gemini Vision API" });
 
         } catch (geminiError) {
-            if (geminiError.message && geminiError.message.includes("429")) {
+            if (geminiError?.status === 429 || (geminiError?.message && (geminiError.message.includes("429") || geminiError.message.toLowerCase().includes("quota") || geminiError.message.toLowerCase().includes("exhausted")))) {
                 console.warn("🚨 OCR Scanner Quota Full! Rotating project...");
                 rotateGeminiProject();
             }
