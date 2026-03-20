@@ -329,6 +329,45 @@ GOOGLE_WEB_RISK_API_KEY=your_web_risk_api_key
 Binary Beasts v2.0 is not just an AI-powered scanner —
 it is a resilient, distributed threat intelligence system designed to operate reliably under real-world constraints.
 
+
+
+---
+
+## 🚀 Version 2.1.0 Update: The "Enterprise SOC" Patch
+*Status: Final GDG Hackathon Production Build*
+
+This version transitions the Binary Beasts engine from a standard detector to a high-availability **Security Operations Center (SOC)** pipeline. We have refined the vocabulary and architecture to meet enterprise-grade technical standards.
+
+### 🧠 1. High-Availability Multi-Model Fallback (Waterfall Architecture)
+To eliminate single points of failure, we implemented a 3-tier fallback system:
+- **Primary:** Google Gemini 2.5 Flash (Advanced Semantic Reasoning)
+- **Secondary:** DeepSeek-R1 (Linguistic Heuristic Fallback)
+- **Tertiary:** Meta Llama 3.1 (High-Speed Localized Reasoning)
+*Ensures resilient threat analysis even during API rate-limiting or provider outages.*
+
+### 🛡️ 2. Heuristic "Unknown Threat" Detection
+We moved beyond simple blacklists. The engine now performs **Semantic Deception Analysis** to catch previously unseen (Zero-Day) phishing tactics:
+- **Subdomain Spoofing Detection:** Identifies malicious structures like `google.com.evil.xyz`.
+- **Infrastructure Risk Scoring:** Automatically flags notorious Top-Level Domains (`.xyz`, `.top`, `.click`) frequently used by threat actors.
+- **BEC (Business Email Compromise) Heuristics:** Detects linkless credential harvesting by identifying requests for OTPs, Passwords, or Wire Transfers.
+
+### 📄 3. Robust OCR Pipeline for Mobile Screenshots
+Optimized for real-world security scenarios:
+- **Jimp Pre-Processing:** Aggressive "Darken & Stretch" pipeline to increase contrast for faint or low-quality mobile text.
+- **Vision Fallback:** Cascading extraction from Gemini Vision to Qwen-2-VL to local Tesseract engines.
+
+### 📊 4. Explainable AI (XAI) & SOC Telemetry
+- **XAI Architecture:** The engine provides a clinical summary of *why* a message was flagged, mapping linguistic patterns to specific threat categories.
+- **Persistent Telemetry:** Real-time **Chart.js** dashboard tracking "Global Threat Data" via LocalStorage. Security metrics survive page refreshes, providing a continuous monitoring experience.
+
+### 🛡️ 5. Hardened Security Layer
+- **Strict Hostname-Validation Whitelist:** A zero-trust domain filter for verified enterprise services.
+- **Full XSS Neutralization:** All AI-generated outputs pass through a multi-stage HTML escaping filter to prevent prompt injection or UI-based attacks.
+- **Node.js Native Fetch Integration:** Modernized backend for high-performance network requests.
+
+---
+**🦾 Binary Beasts: Detect the Invisible. Block the Impossible.**
+
 ## 👨‍💻 Team
 
 **BINARY BEASTS <<0101>>**
