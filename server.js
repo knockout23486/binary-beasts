@@ -133,7 +133,7 @@ async function analyzeWithFallback(prompt) {
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    model: "deepseek/deepseek-chat", //deepseek-r1
+                    model: "openai/gpt-4o-mini", //deepseek-r1
                     messages: [{ role: "user", content: prompt }]
                 })
             }),
@@ -506,7 +506,7 @@ app.post('/api/analyze-link', async (req, res) => {
                         "Content-Type": "application/json"
                     },
                     body: JSON.stringify({
-                        model: "deepseek/deepseek-chat",
+                        model: "openai/gpt-4o-mini",//"deepseek/deepseek-chat"//"deepseek/deepseek-r1"
                         messages: [{ role: "user", content: prompt }]
                     })
                 });
