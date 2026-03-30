@@ -8,6 +8,8 @@ An advanced AI-powered cybersecurity system that detects phishing attacks and so
 
 🔗 https://binary-beasts-imqc.onrender.com
 
+⚡ Note on Performance: We use a free-tier hosting provider (Render). If the extension takes ~50s for the very first scan, the server is performing a "cold start." Subsequent scans will be near-instant (0-2s).
+
 ---
 
 ## 🌍 Project Context
