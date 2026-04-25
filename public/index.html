@@ -855,7 +855,7 @@ const API_BASE = window.location.hostname === 'localhost' || window.location.hos
                 badge.innerText = "🛡️ Powered by Google Gemini";
                 badge.classList.add("badge-gemini");
             } else if (analysis.usedModel === 'deepseek') {
-                badge.innerText = "🧠 Fallback: DeepSeek-R1";
+                badge.innerText = "🧠 Fallback: GPT-4o";  // Fallback: DeepSeek-R1
                 badge.classList.add("badge-deepseek");
             } else if (analysis.usedModel === 'llama') {
                 badge.innerText = "🦙 Fallback: Meta Llama 3.1";
