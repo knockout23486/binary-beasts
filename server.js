@@ -713,11 +713,11 @@ app.post('/api/ocr', upload.single('image'), async (req, res) => {
                     body: JSON.stringify({
                         // Using a highly capable, free vision model on OpenRouter. 
                         // You can swap this to 'openai/gpt-4o-mini' if you have credits!
-                       // model: "meta-llama/llama-3.2-11b-vision-instruct:free",
+                        model: "meta-llama/llama-3.2-11b-vision-instruct",
                        //model: "qwen/qwen-2-vl-7b-instruct:free", 
                        // Change Tier 2 model to this:
                         //model: "google/gemini-flash-1.5-8b",
-                        model: "qwen/qwen-2-vl-7b-instruct",
+                        //model: "qwen/qwen-2-vl-7b-instruct",
                         messages: [
                             {
                                 role: "user",
@@ -788,5 +788,5 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🛡️ Binary Beasts LIVE on port ${PORT}`);
-    console.log(`🦾 Systems: Gemini (Tier 1) | DeepSeek (Tier 2) | Llama (Tier 3)`);
+    console.log(`🦾 Systems: Gemini (Tier 1) | DeepSeek/openai (Tier 2) | Llama (Tier 3)`);
 });
