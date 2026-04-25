@@ -101,7 +101,7 @@ async function analyzeWithFallback(prompt) {
         
         const res = await Promise.race([
             model.generateContent(prompt),
-            timeout(8000)
+            timeout(15000)
         ]);
         
         if (!res || !res.response) throw new Error("Invalid Gemini response");
@@ -137,7 +137,7 @@ async function analyzeWithFallback(prompt) {
                     messages: [{ role: "user", content: prompt }]
                 })
             }),
-            timeout(8000)
+            timeout(10000)
         ]);
         
         // ✅ CRITICAL FIX: Check if HTTP status is 200 OK
@@ -168,7 +168,7 @@ async function analyzeWithFallback(prompt) {
                     messages: [{ role: "user", content: prompt }]
                 })
             }),
-            timeout(8000)
+            timeout(10000)
         ]);
         
         // ✅ CRITICAL FIX: Check if HTTP status is 200 OK
