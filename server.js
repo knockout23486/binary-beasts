@@ -164,6 +164,90 @@ function extractJSON(text) {
     }
 }
 
+// ✅ ROOT-CAUSE FIX: strip any configured secret out of a string before it is
+// ever logged. Defense-in-depth for the "no API keys in logs" requirement —
+// upstream error bodies are not expected to echo request secrets back, but
+// this guarantees it even if one ever did (e.g. a reflected query string in
+// a proxy error page).
+function sanitizeForLog(value) {
+    if (value === undefined || value === null) return value;
+    let out = String(value);
+    const secrets = [process.env.GOOGLE_WEB_RISK_API_KEY, process.env.OPENROUTER_API_KEY]
+        .concat(geminiKeys || [])
+        .filter(s => typeof s === 'string' && s.trim().length > 6);
+    for (const secret of secrets) {
+        if (secret && out.includes(secret)) {
+            out = out.split(secret).join('[REDACTED]');
+        }
+    }
+    return out;
+}
+
+// ✅ ROOT-CAUSE FIX (was: `dsData.choices[0].message.content` /
+// `llamaData.choices[0].message.content` crashing with "Cannot read
+// properties of undefined (reading '0')"):
+//
+// A 2xx/`res.ok` response from OpenRouter does NOT guarantee a `choices`
+// array exists. OpenRouter can return HTTP 200 with:
+//   - an embedded `{ error: {...} }` object instead of a completion (this
+//     happens when every model in a `models[]` fallback list fails, or on
+//     certain rate-limit / provider-outage conditions that don't surface as
+//     a non-2xx status),
+//   - a `choices` array that's empty, or whose first entry has no `message`,
+//   - or (on `!res.ok` proxy/gateway errors) a plain-text/HTML body that
+//     isn't JSON at all.
+//
+// This function is now the ONLY place that reads an OpenRouter chat-
+// completions response. It never accesses `choices[0]` without first
+// checking every link in the chain exists, it never assumes `res.ok` means
+// "safe to parse", and it never assumes `res.json()` will succeed. On any
+// problem it throws a descriptive (secret-free) Error so the existing
+// tier-by-tier try/catch fallback chain in each call site continues to the
+// next tier exactly as it did before — this function changes HOW a failure
+// is detected, not the fact that a failure still results in "try the next
+// tier".
+async function parseOpenRouterResponse(res, tierLabel) {
+    // Read the body once, as text, so both the JSON and non-JSON paths below
+    // can use it without a second (impossible) read of the stream.
+    const rawText = await res.text();
+
+    if (!res.ok) {
+        console.error(`🔴 [${tierLabel}] OpenRouter HTTP ${res.status}:`, sanitizeForLog(rawText).slice(0, 500));
+        throw new Error(`OpenRouter HTTP ${res.status}`);
+    }
+
+    // Guard against non-JSON 200s (HTML error pages, empty bodies, etc.) —
+    // this is what requirement #13 asks for: JSON.parse() itself must never
+    // be allowed to crash the route.
+    let data;
+    try {
+        data = rawText ? JSON.parse(rawText) : null;
+    } catch (parseErr) {
+        console.error(`🔴 [${tierLabel}] OpenRouter returned a non-JSON body:`, sanitizeForLog(rawText).slice(0, 500));
+        throw new Error("OpenRouter returned a non-JSON response");
+    }
+
+    // OpenRouter's own embedded error shape: { error: { code, message, metadata } }
+    if (data?.error) {
+        const code = data.error.code ?? "unknown";
+        const message = data.error.message ?? "unknown error";
+        const metadata = data.error.metadata ? sanitizeForLog(JSON.stringify(data.error.metadata)).slice(0, 300) : "";
+        console.error(`🔴 [${tierLabel}] OpenRouter error object — code=${code} message="${message}" ${metadata}`);
+        throw new Error(`OpenRouter error (${code}): ${message}`);
+    }
+
+    // THE FIX: optional-chain all the way down instead of `data.choices[0]`.
+    const content = data?.choices?.[0]?.message?.content;
+    const modelUsed = data?.model || "unknown";
+
+    if (!content || typeof content !== "string" || content.trim().length === 0) {
+        console.error(`🔴 [${tierLabel}] OpenRouter response had no usable content. model=${modelUsed} responseKeys=[${Object.keys(data || {}).join(",")}]`);
+        throw new Error("OpenRouter returned no usable content");
+    }
+
+    return { content: content.trim(), modelUsed };
+}
+
 // ==========================================
 // 🧠 THE FALLBACK ENGINE (With res.ok Fixes)
 // ==========================================
@@ -228,15 +312,7 @@ try {
         timeout(10000)
     ]);
 
-    if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`HTTP Error ${res.status}: ${errorText}`);
-    }
-
-    const data = await res.json();
-    const text = data?.choices?.[0]?.message?.content;
-    
-    if (!text || text.trim().length === 0) throw new Error("Empty response");
+    const { content: text } = await parseOpenRouterResponse(res, "analyze / Tier 2");
     return { model: "openrouter-GPT", text };
 } catch (e) {
     console.log("Tier 2 failed:", e.message);
@@ -271,15 +347,7 @@ try {
         timeout(10000)
     ]);
 
-    if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`HTTP Error ${res.status}: ${errorText}`);
-    }
-
-    const data = await res.json();
-    const text = data?.choices?.[0]?.message?.content;
-    
-    if (!text || text.trim().length === 0) throw new Error("Empty response");
+    const { content: text } = await parseOpenRouterResponse(res, "analyze / Tier 3");
     return { model: "llama-fallback", text };
 } catch (e) {
     console.log("Tier 3 failed:", e.message);
@@ -574,7 +642,17 @@ app.post('/api/analyze-link', async (req, res) => {
             ]);
 
             if (!webRiskRes.ok) {
-                throw new Error(`Web Risk HTTP ${webRiskRes.status}`);
+                // ✅ FIX (req #9): read the actual response body instead of
+                // discarding it, so a 403 can be diagnosed (API-key
+                // restriction, Web Risk API not enabled, billing not
+                // enabled, invalid/revoked key, etc.) instead of only ever
+                // showing "Web Risk HTTP 403". sanitizeForLog() strips the
+                // configured key out of the text as defense-in-depth before
+                // it's ever logged or placed in the thrown Error's message.
+                const errorBodyText = await webRiskRes.text().catch(() => '');
+                const sanitizedBody = sanitizeForLog(errorBodyText).slice(0, 500);
+                console.error(`🔴 Web Risk HTTP ${webRiskRes.status} — response body:`, sanitizedBody || '(empty body)');
+                throw new Error(`Web Risk HTTP ${webRiskRes.status}: ${sanitizedBody}`);
             }
 
             const webRiskData = await webRiskRes.json();
@@ -641,74 +719,104 @@ app.post('/api/analyze-link', async (req, res) => {
                 console.warn("🚨 Link Scanner Quota Full! Rotating project...");
                 rotateGeminiProject();
             }
-            console.warn("⚠️ Gemini Error. Switching to TIER 2: DeepSeek...");
+            // ✅ FIX (req #8): this tier is OpenRouter, not DeepSeek — the
+            // old log claimed a specific provider the code never called.
+            console.warn("⚠️ Gemini Error. Switching to TIER 2: OpenRouter Free...");
 
 // 🔵 TIER 2: OPENROUTER FREE
             try {
-                const dsRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                    method: "POST",
-                    headers: {
-                        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        // ✅ FIX: Route to any active free model
-                       models: [
-                                 "thinkingmachines/inkling:free",
-                               // "google/gemma-4-31b-it:free",
-                                "nvidia/nemotron-3-ultra-550b-a55b:free",
-                                "google/gemma-4-26b-a4b-it:free",
-                               // "openai/gpt-oss-20b:free",
-                                
-                            ],
-                        messages: [{ role: "user", content: prompt }]
-                    })
-                });
+                const dsRes = await Promise.race([
+                    fetch("https://openrouter.ai/api/v1/chat/completions", {
+                        method: "POST",
+                        headers: {
+                            "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                            "Content-Type": "application/json",
+                            "HTTP-Referer": "http://localhost:3000",
+                            "X-Title": "Binary Beasts Scanner"
+                        },
+                        body: JSON.stringify({
+                            // ✅ FIX: Route to any active free model
+                           models: [
+                                     "thinkingmachines/inkling:free",
+                                   // "google/gemma-4-31b-it:free",
+                                    "nvidia/nemotron-3-ultra-550b-a55b:free",
+                                    "google/gemma-4-26b-a4b-it:free",
+                                   // "openai/gpt-oss-20b:free",
 
-                if (!dsRes.ok) {
-                    const errText = await dsRes.text();
-                    throw new Error(`OpenRouter HTTP ${dsRes.status}: ${errText}`);
-                }
-                
-                const dsData = await dsRes.json();
-                finalExplanation = dsData.choices[0].message.content;
-                usedEngine = "OpenRouter-GPT";
+                                ],
+                            messages: [{ role: "user", content: prompt }]
+                        })
+                    }),
+                    // ✅ FIX (related bug, req #14): every other AI call in
+                    // this file (Gemini, analyzeWithFallback Tiers 2 & 3,
+                    // OCR Tier 1) is wrapped in Promise.race([..., timeout()])
+                    // — this fetch and the Tier 3 fetch below were the only
+                    // two AI calls with no bound, so a hung OpenRouter
+                    // request could stall the whole /api/analyze-link
+                    // response well past the 40s the frontend already waits.
+                    timeout(10000)
+                ]);
+
+                const { content, modelUsed } = await parseOpenRouterResponse(dsRes, "analyze-link / Tier 2");
+                finalExplanation = content;
+                // ✅ FIX (req #8): report the real provider/model, not a
+                // hardcoded "GPT" label — OpenRouter's `models[]` fallback
+                // can resolve to any of the free models listed above.
+                usedEngine = `OpenRouter Free (${modelUsed})`;
 
             } catch (deepseekError) {
                 console.warn("⚠️ Tier 2 Error:", deepseekError.message, "- Switching to TIER 3...");
 
                 // 🟠 TIER 3: PINNED FREE FALLBACK (Replaces Paid Llama)
                 try {
-                    const llamaRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                        method: "POST",
-                        headers: {
-                            "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                            "Content-Type": "application/json"
-                        },
-                        body: JSON.stringify({
-                            // ✅ FIX: Use an array of explicitly free fallback models
-                            models: [
-                               
-                               "thinkingmachines/inkling-small:free",
-                               "cohere/north-mini-code:free",
-                             // "nvidia/nemotron-3.5-lightning:free",
-                               //"nvidia/nemotron-3-nano-30b-a3b:free",
-                               "openai/gpt-oss-20b:free",
-],
-                            messages: [{ role: "user", content: prompt }]
-                        })
-                    });
+                    const llamaRes = await Promise.race([
+                        fetch("https://openrouter.ai/api/v1/chat/completions", {
+                            method: "POST",
+                            headers: {
+                                "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                                "Content-Type": "application/json",
+                                "HTTP-Referer": "http://localhost:3000",
+                                "X-Title": "Binary Beasts Scanner"
+                            },
+                            body: JSON.stringify({
+                                // ✅ FIX: Use an array of explicitly free fallback models
+                                models: [
 
-                    if (!llamaRes.ok) {
-                        const errText = await llamaRes.text();
-                        throw new Error(`Tier 3 Offline: ${errText}`);
-                    }
-                    
-                    const llamaData = await llamaRes.json();
-                    finalExplanation = llamaData.choices[0].message.content;
-                    usedEngine = "Llama-Fallback";
+                                   "thinkingmachines/inkling-small:free",
+                                   "cohere/north-mini-code:free",
+                                 // "nvidia/nemotron-3.5-lightning:free",
+                                   //"nvidia/nemotron-3-nano-30b-a3b:free",
+                                   "openai/gpt-oss-20b:free",
+    ],
+                                messages: [{ role: "user", content: prompt }]
+                            })
+                        }),
+                        // ✅ FIX (related bug, req #14): same missing-timeout
+                        // gap as Tier 2 above — bounded now, so a stalled
+                        // request can't block the response indefinitely.
+                        timeout(10000)
+                    ]);
+
+                    // ✅ ROOT-CAUSE FIX: this line —
+                    // `llamaData.choices[0].message.content` — is exactly the
+                    // unsafe access from the bug report. It crashed with
+                    // "Cannot read properties of undefined (reading '0')"
+                    // whenever OpenRouter returned a 200 with no `choices`
+                    // (e.g. an embedded error object because every model in
+                    // the fallback list failed). parseOpenRouterResponse()
+                    // now validates the full shape before ever touching it.
+                    const { content, modelUsed } = await parseOpenRouterResponse(llamaRes, "analyze-link / Tier 3");
+                    finalExplanation = content;
+                    // ✅ FIX (req #8): real provider/model instead of a
+                    // hardcoded "Llama" label — no Llama model is requested
+                    // by this tier at all.
+                    usedEngine = `OpenRouter Free Backup (${modelUsed})`;
 
                 } catch (llamaError) {
+                    // ✅ FIX (req #4/#14): the final tier previously failed
+                    // silently — nothing was logged before falling back, so
+                    // "all AI providers failed" was invisible in server logs.
+                    console.warn("⚠️ Tier 3 Error:", llamaError.message, "- Falling back to System Fallback.");
                     finalExplanation = isBlacklisted 
                         ? "🚨 HIGH RISK: Database confirms a threat. AI analysis offline." 
                         : "No known database threats found. Please remain cautious with unsolicited links.";
@@ -1141,5 +1249,5 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🛡️ Binary Beasts LIVE on port ${PORT}`);
-    console.log(`🦾 Systems: Gemini (Tier 1) | DeepSeek/openai (Tier 2) | Llama (Tier 3)`);
+    console.log(`🦾 Systems: Gemini (Tier 1) | OpenRouter Free (Tier 2) | OpenRouter Free Backup (Tier 3)`);
 });
